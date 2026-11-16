@@ -4,6 +4,8 @@
 
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable'
 import {
@@ -20,8 +22,13 @@ import {
   updates,
 } from './support/relay-run.mts'
 
-const testy = process.env.ACP_TESTY ?? new URL('../../ci/testy/target/debug/testy', import.meta.url).pathname
-const skip = existsSync(testy) ? false : `testy is not at ${testy}: cargo build --manifest-path ci/testy/Cargo.toml, or set ACP_TESTY`
+// Built outside the plugin's folder: Cargo hard-links its build output, and `claude plugin eval` refuses a plugin
+// with hard-linked files. CI builds it in place and names it with ACP_TESTY.
+const built = join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'via/testy')
+const testy = process.env.ACP_TESTY ?? join(built, 'debug/testy')
+const skip = existsSync(testy)
+  ? false
+  : `testy is not at ${testy}: cargo build --manifest-path ci/testy/Cargo.toml --target-dir ${built}, or set ACP_TESTY`
 const QUIET = { RUST_LOG: 'error' }
 
 const run = (prompt: string, env: Record<string, string> = {}) =>
