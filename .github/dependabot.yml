@@ -19,6 +19,16 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+  # The Codex version CI's harnesses job tests with: via runs the person's own, usually the latest.
+  - package-ecosystem: npm
+    directory: /ci/codex
+    schedule:
+      interval: weekly
+  # The OpenCode version CI's harnesses job tests with, as an image tag (the job downloads its release).
+  - package-ecosystem: docker
+    directory: /ci/opencode
+    schedule:
+      interval: weekly
   - package-ecosystem: github-actions
     directory: /
     schedule:

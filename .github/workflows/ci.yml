@@ -62,30 +62,34 @@ jobs:
           fi
 
   # The real codex-acp and opencode behind the real relay, the model a local fake: no tokens, no network, no
-  # login (relay/test/real-*.test.mjs). Elsewhere those tests skip, as the harnesses aren't installed. The
-  # versions are the ones via is tested with: bump them with relay/codex-acp's lock.
+  # login (relay/test/real-*.test.mjs). Elsewhere those tests skip, as the harnesses aren't installed. Every
+  # version is one Dependabot bumps: codex-acp from relay/codex-acp, installed as via installs it; Codex from
+  # ci/codex; OpenCode from ci/opencode/Dockerfile.
   harnesses:
     runs-on: ubuntu-latest
-    env:
-      CODEX_VERSION: 0.167.2
-      OPENCODE_VERSION: 2.2.7
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '26'
-      - name: Install Codex, OpenCode and the locked codex-acp
+      - name: Install codex-acp, Codex and OpenCode
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          npm install -g "@openai/codex@$CODEX_VERSION"
-          gh release download "v$OPENCODE_VERSION" -R anomalyco/opencode -p opencode-linux-x64.tar.gz -D "$RUNNER_TEMP/opencode"
-          tar -xzf "$RUNNER_TEMP/opencode/opencode-linux-x64.tar.gz" -C "$RUNNER_TEMP/opencode"
-          echo "$RUNNER_TEMP/opencode" >> "$GITHUB_PATH"
-          mkdir -p "$RUNNER_TEMP/codex-acp"
+          # codex-acp as via installs it (hooks/install.ts): no optional packages, so no Codex of its own.
+          mkdir -p "$RUNNER_TEMP/codex-acp" "$RUNNER_TEMP/codex"
           cp relay/codex-acp/package.json relay/codex-acp/package-lock.json "$RUNNER_TEMP/codex-acp/"
           (cd "$RUNNER_TEMP/codex-acp" && npm ci --ignore-scripts --omit=optional --no-audit --no-fund)
           echo "CODEX_ACP=$RUNNER_TEMP/codex-acp/node_modules/@agentclientprotocol/codex-acp/dist/index.js" >> "$GITHUB_ENV"
+          # The person's own codex, which via runs (CODEX_PATH=codex).
+          cp ci/codex/package.json ci/codex/package-lock.json "$RUNNER_TEMP/codex/"
+          (cd "$RUNNER_TEMP/codex" && npm ci --ignore-scripts --no-audit --no-fund)
+          echo "$RUNNER_TEMP/codex/node_modules/.bin" >> "$GITHUB_PATH"
+          version=$(sed -n 's|^FROM ghcr.io/anomalyco/opencode:\([^@[:space:]]*\).*|\1|p' ci/opencode/Dockerfile)
+          gh release download "v$version" -R anomalyco/opencode -p opencode-linux-x64.tar.gz -D "$RUNNER_TEMP/opencode"
+          tar -xzf "$RUNNER_TEMP/opencode/opencode-linux-x64.tar.gz" -C "$RUNNER_TEMP/opencode"
+          echo "$RUNNER_TEMP/opencode" >> "$GITHUB_PATH"
       - name: Relay tests, none skipped
         run: |
           set -o pipefail
