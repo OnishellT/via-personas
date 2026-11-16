@@ -1,5 +1,5 @@
 import type { TurnStepChunk, TurnUsage } from 'claude-code'
-import type { Mark } from './acp/steps'
+import type { CallInput, Mark } from './acp/steps'
 
 // What a run says, block by block, and its answer so far: one for a via agent's run (run.ts), one for a
 // nested agent's (children.ts). Each call, plan row or spawn ends a step, and Claude Code takes the last
@@ -52,7 +52,7 @@ export class StepWriter {
     this.spoke = false
   }
 
-  call(id: string, input: { kind: string; title: string; path?: string }, usage: TurnUsage | null): Mark {
+  call(id: string, input: CallInput, usage: TurnUsage | null): Mark {
     this.boundary()
     return { kind: 'call-start', id, input, usage }
   }

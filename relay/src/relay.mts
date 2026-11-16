@@ -5,7 +5,9 @@
 // Env:
 //   RELAY_INBOX       file of JSON lines the plugin appends: a string steers the running prompt (see
 //                     RELAY_STEER) or queues a follow-up, {"interrupt": text} cancels the turn and runs text
-//                     next, {"answer": id, "optionId": id|null} answers a question
+//                     next, {"answer": id, "optionId": id|null} answers a permission request, {"question": id,
+//                     "answer": {"action": ..., "content": ...}} answers a question (each printed as a
+//                     {"relay":"question"} line; {"relay":"question_closed"} says one no longer needs an answer)
 //   RELAY_STEER       how a string reaches a running prompt: steering (codex-acp's _session/steering), prompt
 //                     (a second session/prompt, which opencode takes at its next step); unset: queued
 //   RELAY_SESSION     a session to resume (session/load)
@@ -119,6 +121,9 @@ const CAPABILITIES: acp.ClientCapabilities = {
   // notices: codex-acp then sends its warnings as notices, not as text in the answer.
   session: { compaction: {}, notices: {} },
   subagents: {},
+  // A harness's questions to the person (ACP elicitation, adapted from MCP's): printed as {"relay":"question"}
+  // lines, which via asks through Claude Code's own MCP elicitation form.
+  elicitation: { form: {}, url: {} },
   _meta: { terminal_output_delta: true },
 }
 const dash = process.argv.indexOf('--')
@@ -170,6 +175,40 @@ agent.on('exit', (code) => {
 const RUN = `${process.pid}-${Date.now().toString(36)}`
 const asked = new Map<string, Answer>()
 let asks = 0
+// A question's answer, as MCP's elicitation result and ACP's are alike: accept (with content), decline, cancel.
+type QuestionAnswer = acp.CreateElicitationResponse
+const questions = new Map<string, (answer: QuestionAnswer) => void>()
+const CANCEL: QuestionAnswer = { action: 'cancel' }
+// A question still open that no answer will settle (an interrupt, the agent's own cancel): cancelled, and said
+// with a {"relay":"question_closed"} line, so the plugin stops waiting on the person.
+const closeQuestion = (id: string) => {
+  const answerIt = questions.get(id)
+  if (answerIt === undefined) return
+  questions.delete(id)
+  out({ relay: 'question_closed', id })
+  answerIt(CANCEL)
+}
+// What a question carries to the person, without ACP's own scope fields: the shape MCP's elicitation takes.
+const question = (request: acp.CreateElicitationRequest) =>
+  request.mode === 'url'
+    ? { mode: 'url', message: request.message, url: request.url, elicitationId: request.elicitationId }
+    : { mode: 'form', message: request.message, requestedSchema: 'requestedSchema' in request ? request.requestedSchema : undefined }
+const web = (url: unknown) => {
+  try {
+    return ['https:', 'http:'].includes(new URL(String(url)).protocol)
+  } catch {
+    return false
+  }
+}
+const answered = (value: unknown): QuestionAnswer => {
+  const answer = typeof value === 'object' && value !== null ? (value as { action?: unknown; content?: unknown }) : {}
+  if (answer.action === 'accept')
+    return {
+      action: 'accept',
+      content: typeof answer.content === 'object' && answer.content !== null ? (answer.content as Record<string, never>) : {},
+    }
+  return answer.action === 'decline' ? { action: 'decline' } : CANCEL
+}
 const choose = (options: readonly acp.PermissionOption[], kind: acp.PermissionOptionKind): acp.RequestPermissionResponse => {
   const option = options.find((o) => o.kind === kind)
   return { outcome: option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' } }
@@ -205,6 +244,20 @@ const result = await acp
         resolve(optionId ? { outcome: { outcome: 'selected', optionId } } : { outcome: { outcome: 'cancelled' } }),
       ),
     )
+  })
+  .onRequest(acp.methods.client.elicitation.create, (ctx) => {
+    // With no inbox no answer can come back: cancel rather than wait forever.
+    if (!process.env.RELAY_INBOX) return CANCEL
+    // A link to open is a web page's, nothing else (a file, a script, an app's own scheme).
+    if (ctx.params.mode === 'url' && !web(ctx.params.url)) return CANCEL
+    const id = `${RUN}-q${++asks}`
+    out({ relay: 'question', id, ...question(ctx.params) })
+    return new Promise<QuestionAnswer>((resolve) => {
+      questions.set(id, resolve)
+      // The agent withdrew it ($/cancel_request): the person need not answer.
+      if (ctx.signal.aborted) closeQuestion(id)
+      else ctx.signal.addEventListener('abort', () => closeQuestion(id), { once: true })
+    })
   })
   .onNotification(acp.methods.client.session.update, (ctx) => {
     if (!busy && ctx.params.update.sessionUpdate === 'agent_message_chunk') spokeIdle = true
@@ -384,6 +437,10 @@ const result = await acp
             // Not into a turn an interrupt is cancelling.
             if (busy && interrupt === undefined && process.env.RELAY_STEER) steer(value)
             else queue.push(value)
+          } else if (typeof value === 'object' && value !== null && 'question' in value) {
+            const { question: id, answer } = value as { question: string; answer?: unknown }
+            questions.get(id)?.(answered(answer))
+            questions.delete(id)
           } else if (typeof value === 'object' && value !== null && 'answer' in value) {
             const { answer, optionId } = value as { answer: string; optionId?: string | null }
             asked.get(answer)?.(optionId ?? null)
@@ -396,6 +453,7 @@ const result = await acp
               answerIt(null)
               asked.delete(id)
             }
+            for (const id of [...questions.keys()]) closeQuestion(id)
             void ctx.notify(acp.methods.agent.session.cancel, { sessionId })
           }
         }

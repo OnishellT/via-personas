@@ -6,7 +6,9 @@
 // it; FAKE_LOG names a file each cancel and close is written to. FAKE_OPTIONS offers config options, as
 // codex-acp does: a model and its reasoning efforts; each set one is logged. FAKE_REFUSE refuses every config
 // option and mode, with its reason in the error's data, as testy and codex-acp do. FAKE_ASK asks permission to run a
-// command before it answers, then answers with the option the relay chose.
+// command before it answers, then answers with the option the relay chose. FAKE_QUESTION (form or url) asks the person
+// one question before it answers, then answers with what came back; FAKE_QUESTION_URL is the link it asks to open;
+// FAKE_WITHDRAW withdraws the question ($/cancel_request) as soon as it is asked.
 import { appendFileSync } from 'node:fs'
 import { Readable, Writable } from 'node:stream'
 // The unstable schema, as codex-acp's: the stable one has no plan capability and drops it.
@@ -78,6 +80,38 @@ await acp
         release = resolve
       })
       return { stopReason: 'cancelled' }
+    }
+    if (process.env.FAKE_QUESTION) {
+      const withdraw = new AbortController()
+      const asking = ctx.client.request(
+        acp.methods.client.elicitation.create,
+        process.env.FAKE_QUESTION === 'url'
+          ? {
+              sessionId: 's1',
+              mode: 'url',
+              message: 'Sign in to continue.',
+              url: process.env.FAKE_QUESTION_URL ?? 'https://example.com/login',
+              elicitationId: 'e1',
+            }
+          : {
+              sessionId: 's1',
+              mode: 'form',
+              message: 'Which target?',
+              requestedSchema: {
+                type: 'object',
+                properties: { target: { type: 'string', enum: ['staging', 'production'] } },
+                required: ['target'],
+              },
+            },
+        { cancellationSignal: withdraw.signal },
+      )
+      if (process.env.FAKE_WITHDRAW === '1') withdraw.abort()
+      const asked = await asking.catch((error: unknown) => ({ error: (error as { code?: unknown }).code }))
+      await ctx.client.notify(acp.methods.client.session.update, {
+        sessionId: 's1',
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `got ${JSON.stringify(asked)}` } },
+      })
+      return { stopReason: 'end_turn' }
     }
     if (process.env.FAKE_ASK === '1') {
       const asked = await ctx.client.request(acp.methods.client.session.requestPermission, {

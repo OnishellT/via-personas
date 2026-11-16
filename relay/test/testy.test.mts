@@ -135,6 +135,22 @@ test("a mode testy offers is set; a model it doesn't offer ends the run with tes
   )
 })
 
+// testy's questions (callbacks and elicitations ask them all), one at a time, each waiting for its answer: the
+// answers cover accept, decline and cancel.
+const REPLIES = [
+  { action: 'accept', content: { name: 'via' } },
+  { action: 'decline' },
+  { action: 'cancel' },
+  { action: 'accept' },
+  { action: 'decline' },
+]
+const answerQuestions = async (r: ReturnType<typeof startRelay>, inbox: string) => {
+  for (const [i, reply] of REPLIES.entries()) {
+    await r.until(() => relayEventsNamed(r.events, 'question').length > i)
+    send(inbox, { question: relayEventsNamed(r.events, 'question')[i]?.id, answer: reply })
+  }
+}
+
 test('callbacks: a permission ask reaches the plugin, and its answer goes back to testy', { skip }, async () => {
   const b = sandbox()
   const r = startRelay({
@@ -152,9 +168,26 @@ test('callbacks: a permission ask reaches the plugin, and its answer goes back t
   assert.ok(Array.isArray(options))
   assert.ok(options.some((o) => get(o, 'optionId') === 'reject_once'))
   send(b.inbox, { answer: ask.id, optionId: 'reject_once' })
-  // testy goes on past the permission request once it has the answer: the run ends on its own, not by the
-  // backstop, which is what ends one whose answer never arrived.
+  await answerQuestions(r, b.inbox)
+  // testy goes on past each request once it has the answer: the run ends on its own, not by the backstop,
+  // which is what ends one whose answer never arrived.
   await r.exited
   assert.equal(r.stderr.includes('stopped after'), false, r.stderr)
   assert.equal(relayEventsNamed(r.events, 'ask').length, 1)
+})
+
+test("elicitations: each of testy's questions reaches the plugin, form and link, and each answer goes back", { skip }, async () => {
+  const b = sandbox()
+  const r = startRelay({ agent: [testy], prompt: 'elicitations', cwd: b.work, env: { ...QUIET, RELAY_INBOX: b.inbox }, backstopMs: 10_000 })
+  await answerQuestions(r, b.inbox)
+  // The run ends on its own once testy has every answer, not by the backstop.
+  assert.equal(await r.exited, 0, r.stderr)
+  assert.equal(r.stderr.includes('stopped after'), false, r.stderr)
+  const asked = relayEventsNamed(r.events, 'question')
+  assert.deepEqual(
+    asked.map((q) => q.mode),
+    ['form', 'form', 'form', 'url', 'url'],
+  )
+  for (const q of asked) assert.equal(q.mode === 'url' ? typeof q.url : typeof q.requestedSchema, q.mode === 'url' ? 'string' : 'object')
+  assert.equal(new Set(asked.map((q) => q.id)).size, asked.length)
 })

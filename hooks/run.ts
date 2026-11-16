@@ -99,6 +99,17 @@ function take(s: RunState, c: Context, event: Norm): (TurnStepChunk | Mark)[] {
     case 'ask':
       s.asks.push(event.ask)
       return []
+    case 'question-closed':
+      return [{ kind: 'question-closed', id: event.id }]
+    case 'question':
+      // A step call that via's hook lets through to the step server, which asks in Claude Code's own form.
+      return [
+        s.writer.call(
+          event.question.id,
+          { kind: 'question', title: event.question.message, question: event.question },
+          usageOf(s, c.adapter),
+        ),
+      ]
     case 'notice':
       s.notices.push(event.t)
       return []

@@ -8,7 +8,11 @@ export const NO_OUTPUT = 'Done; no output reported.'
 // a compaction's summary is not, as Claude Code keeps its own behind ctrl+o.
 const FOLDED: Record<string, number> = { edit: 12, plan: 12, compact: 1 }
 // The calls whose row reads as a verb on its title.
-const VERBS: Record<string, [string, string]> = { execute: ['Running', 'Ran'], compact: ['Compacting', 'Compacted'] }
+const VERBS: Record<string, [string, string]> = {
+  execute: ['Running', 'Ran'],
+  compact: ['Compacting', 'Compacted'],
+  question: ['Asking', 'Asked'],
+}
 
 // A changed line of a diff in its theme colour; the rest dim, as a call's output is.
 function outputLine(line: string, first: boolean, diff: boolean): RenderElement {
@@ -34,6 +38,7 @@ const COUNTED: Record<string, [string, string, string, string]> = {
   delete: ['Deleting', 'Deleted', 'file', 'files'],
   move: ['Moving', 'Moved', 'file', 'files'],
   fetch: ['Fetching', 'Fetched', 'page', 'pages'],
+  question: ['Asking', 'Asked', 'question', 'questions'],
 }
 
 // The line Claude Code folds a run of harness tool calls into, counted by what each did ("Read 3 files,

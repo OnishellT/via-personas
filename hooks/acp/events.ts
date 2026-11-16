@@ -1,5 +1,5 @@
 import { isRecord } from './json'
-import type { Ask, Norm } from './norm'
+import type { Ask, Norm, Question } from './norm'
 import { unhidden } from './text'
 import type { SessionUpdate } from './wire'
 
@@ -95,6 +95,51 @@ function ask(e: Record<string, unknown>): Ask | undefined {
     ...(typeof e.command === 'string' ? { command: e.command } : {}),
     options,
   }
+}
+
+// What a form shows, without the characters that hide or reorder text, as a permission ask's text is: its
+// titles, descriptions, choice names and default text. A choice shown by its value (an enum with no names, a
+// oneOf option with no title) gets a cleaned name; the values that go back to the harness stay as they are.
+function shownSchema(value: unknown, key = ''): unknown {
+  if (typeof value === 'string') return key === 'title' || key === 'description' || key === 'default' ? unhidden(value) : value
+  if (Array.isArray(value))
+    return value.map((item) => (key === 'enumNames' && typeof item === 'string' ? unhidden(item) : shownSchema(item)))
+  if (!isRecord(value)) return value
+  const shown = Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shownSchema(v, key === 'properties' ? '' : k)]))
+  // A field with no title is shown by its name: given a cleaned title when cleaning would change it.
+  if (key === 'properties')
+    return Object.fromEntries(
+      Object.entries(shown).map(([name, field]) =>
+        isRecord(field) && !field.title && unhidden(name) !== name ? [name, { ...field, title: unhidden(name) }] : [name, field],
+      ),
+    )
+  const choices = value.enum
+  if (Array.isArray(choices) && value.enumNames === undefined && choices.some((c) => typeof c === 'string' && unhidden(c) !== c))
+    shown.enumNames = choices.map((c) => unhidden(String(c)))
+  if (typeof value.const === 'string' && !value.title && unhidden(value.const) !== value.const) shown.title = unhidden(value.const)
+  return shown
+}
+
+function question(e: Record<string, unknown>): Question | undefined {
+  if (typeof e.id !== 'string' || typeof e.message !== 'string') return undefined
+  const message = unhidden(e.message)
+  if (e.mode === 'url') {
+    // Web links only, checked here as well as in the relay; the message names the site, whatever the harness wrote.
+    let host: string
+    try {
+      const url = new URL(String(e.url))
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+      host = url.host
+    } catch {
+      return undefined
+    }
+    return typeof e.url === 'string' && typeof e.elicitationId === 'string'
+      ? { id: e.id, message: `${message} (opens ${host})`, mode: 'url', url: e.url, elicitationId: e.elicitationId }
+      : undefined
+  }
+  return e.mode === 'form' && isRecord(e.requestedSchema)
+    ? { id: e.id, message, mode: 'form', requestedSchema: shownSchema(e.requestedSchema) as Record<string, unknown> }
+    : undefined
 }
 
 // One session's updates: the harness's own, or one of its subagents' (ACP's subagents RFD), each with its
@@ -278,6 +323,12 @@ export function relayEvents(): (line: string) => Norm[] {
         return [{ k: 'steered' }]
       case 'interrupted':
         return [{ k: 'interrupted' }, { k: 'tool', t: '\n▸ interrupted\n' }]
+      case 'question_closed':
+        return typeof e.id === 'string' ? [{ k: 'question-closed', id: e.id }] : []
+      case 'question': {
+        const asked = question(e)
+        return asked ? [{ k: 'question', question: asked }] : []
+      }
       case 'ask': {
         const asked = ask(e)
         return asked ? [{ k: 'ask', ask: asked }] : []

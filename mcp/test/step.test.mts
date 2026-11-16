@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { createInterface } from 'node:readline'
 import { test } from 'node:test'
 
 const server = new URL('../step.mts', import.meta.url).pathname
@@ -57,4 +58,84 @@ test("the hooks answer the tool Claude Code names after plugin.json's server", (
   const [server] = Object.keys(plugin.mcpServers)
   const hooks = readFileSync(new URL('hooks/register.ts', root), 'utf8')
   assert.match(hooks, new RegExp(`const STEP = 'mcp__plugin_${plugin.name}_${server}__step'`))
+})
+
+/** The server as a client talks to it, both ways: each line it prints, waited for in turn, never by time. */
+const session = (elicitation?: Record<string, object>) => {
+  const child = spawn('node', [server], { stdio: ['pipe', 'pipe', 'inherit'], timeout: 20_000 })
+  const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]()
+  const write = (message: Record<string, unknown>) => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
+  const read = async () => {
+    const line = await lines.next()
+    // Ends with the server: a wait for a line that never comes fails, rather than hangs.
+    assert.equal(line.done, false, 'the server ended')
+    return JSON.parse(line.value) as { id?: number | string; method?: string; params?: Record<string, unknown>; result?: unknown }
+  }
+  write({ id: 0, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: elicitation ? { elicitation } : {} } })
+  return { write, read, end: () => child.stdin.end() }
+}
+
+const FORM = {
+  mode: 'form',
+  message: 'Which target?',
+  requestedSchema: { type: 'object', properties: { target: { type: 'string', enum: ['staging', 'production'] } } },
+}
+const LINK = { mode: 'url', message: 'Sign in to continue.', url: 'https://example.com/login', elicitationId: 'e1' }
+const replyIn = (result: unknown) => JSON.parse((result as { content: { text: string }[] }).content[0]?.text ?? '') as unknown
+
+/** A question call against a client that offers `elicitation`: the request the client got (if any) and the call's result. */
+const asked = async (
+  elicitation: Record<string, object> | undefined,
+  question: object,
+  reply: (request: { id?: number | string }) => object,
+) => {
+  const s = session(elicitation)
+  await s.read()
+  s.write({ id: 1, method: 'tools/call', params: { name: 'step', arguments: { kind: 'question', title: 'q', question } } })
+  const first = await s.read()
+  if (first.id === 1) {
+    s.end()
+    return { request: undefined, result: replyIn(first.result) }
+  }
+  s.write({ id: first.id, ...reply(first) })
+  const answered = await s.read()
+  s.end()
+  assert.equal(answered.id, 1)
+  return { request: first, result: replyIn(answered.result) }
+}
+
+test("a question call is asked as MCP's form elicitation, and the person's reply is the call's result", async () => {
+  const { request, result } = await asked({ form: {}, url: {} }, FORM, () => ({
+    result: { action: 'accept', content: { target: 'staging' } },
+  }))
+  // Form is MCP's default mode: the request names none, as a client that knows only forms expects.
+  assert.deepEqual(
+    { method: request?.method, params: request?.params },
+    {
+      method: 'elicitation/create',
+      params: { message: FORM.message, requestedSchema: FORM.requestedSchema },
+    },
+  )
+  assert.deepEqual(result, { action: 'accept', content: { target: 'staging' } })
+})
+
+test('a link question is asked as a URL elicitation; a decline comes back as a decline', async () => {
+  const { request, result } = await asked({ form: {}, url: {} }, LINK, () => ({ result: { action: 'decline' } }))
+  assert.deepEqual(request?.params, LINK)
+  assert.deepEqual(result, { action: 'decline' })
+})
+
+test("what the client can't show is cancelled without asking: no elicitation, or no links", async () => {
+  assert.deepEqual(await asked(undefined, FORM, () => ({})), { request: undefined, result: { action: 'cancel' } })
+  assert.deepEqual(await asked({ form: {} }, LINK, () => ({})), { request: undefined, result: { action: 'cancel' } })
+})
+
+test('a client offering elicitation with no modes named shows forms, as MCP had it first', async () => {
+  const { request } = await asked({}, FORM, () => ({ result: { action: 'cancel' } }))
+  assert.equal(request?.method, 'elicitation/create')
+})
+
+test('a client that fails the elicitation gets a cancel back', async () => {
+  const { result } = await asked({ form: {} }, FORM, () => ({ error: { code: -32603, message: 'no' } }))
+  assert.deepEqual(result, { action: 'cancel' })
 })

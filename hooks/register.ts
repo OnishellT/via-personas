@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { drawCall, drawGroup } from './acp/render'
-import { answerCall, CHILD_CALL, endJob, waitStep } from './acp/steps'
+import { answerCall, CHILD_CALL, endJob, STEP_CALL, waitStep } from './acp/steps'
 import type { Adapter } from './adapter'
 import { waitChild, woken } from './children'
 import { respond, textChunks } from './handback'
@@ -9,7 +9,7 @@ import { cachedModels, refreshModels } from './models'
 import { descriptionOf, isModel, promptOf } from './prompt'
 import { createRecord, recordOf, updateRecord } from './record'
 import { notActivePrompt } from './run'
-import { sendMessage, steer, typed } from './steer'
+import { answerQuestion, sendMessage, steer, typed } from './steer'
 import { adapterOf, turnStep } from './turn'
 import type { World } from './world'
 
@@ -103,6 +103,10 @@ function choiceOf(world: World, adapter: Adapter, prompt: string): { model?: str
   return { model: asked.model ?? fallback, thinking: asked.thinking }
 }
 
+// The permission mode's own ask, for its decider (auto mode's classifier): not a rule's, a setting's, a hook's or a plugin's.
+const modeAsks = (v: { decision: string; rule?: string; hook?: string; setting?: string; plugin?: string }) =>
+  v.decision === 'ask' && !v.rule && !v.hook && !v.setting && !v.plugin
+
 // Auto mode asks a local agent to end with a SubagentHandback; the engine's reminder is not in
 // session.messages, so the spawn's terms are kept. A remote spawn has no field here (isolation is on
 // AgentSpec, not AgentSpawnInput), and background cannot tell it from any other background spawn.
@@ -178,8 +182,15 @@ export const register: Register = (on, options) => {
   on('tool.check', { tool: 'Agent' }, async (_, e, next) => {
     const verdict = await next(e)
     const own = e.agentId !== undefined && world.records.has(e.agentId) && e.tool_use_id?.startsWith(CHILD_CALL)
-    const modes = verdict.decision === 'ask' && !verdict.rule && !verdict.hook && !verdict.setting && !verdict.plugin
-    return own && modes ? { decision: 'allow', reason: "via's own call for its harness's subagent" } : verdict
+    return own && modeAsks(verdict) ? { decision: 'allow', reason: "via's own call for its harness's subagent" } : verdict
+  })
+  // A step call that asks the person, made up by via like the Agent call above, and settled the same way: it
+  // only puts the harness's question to the person, who answers or declines it in Claude Code's form.
+  // Known by its id and input, as the check doesn't see the step's calls in flight (seen live 2026-11-16).
+  on('tool.check', { tool: STEP as 'Bash' }, async (_, e, next) => {
+    const verdict = await next(e)
+    const own = e.tool_use_id?.startsWith(STEP_CALL) === true && (e.input as { kind?: unknown } | undefined)?.kind === 'question'
+    return own && modeAsks(verdict) ? { decision: 'allow', reason: "via's own call, asking you the harness's question" } : verdict
   })
 
   // Typed into a via agent's view while it runs: Claude Code delivers it at the agent's next step, as an
@@ -293,7 +304,12 @@ export const register: Register = (on, options) => {
     on('tool.call', { tool: 'SendMessage' }, async ($, e, next) => sendMessage(world, $, e, next))
 
   // The matcher's type names only built-in tools; an MCP tool's full name is accepted at run time.
-  on('tool.call', { tool: STEP as 'Bash' }, (_, e, next) => answerCall(world, e.tool_use_id, next.signal)).catch(() => ({
+  // A step call that asks the person goes through to the step server, which asks in Claude Code's own form.
+  on('tool.call', { tool: STEP as 'Bash' }, ($, e, next) =>
+    e.tool_use_id !== undefined && world.calls.get(e.tool_use_id)?.question
+      ? answerQuestion($, world, e.tool_use_id, () => next(e))
+      : answerCall(world, e.tool_use_id, next.signal),
+  ).catch(() => ({
     deny: 'via could not report this harness tool call.',
   }))
 

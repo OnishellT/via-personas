@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, test } from 'node:test'
-import { execCommandResponse, type FakeModel, hang, startFakeModel, textResponse } from './support/fake-model.mts'
+import { execCommandResponse, type FakeModel, functionCallResponse, hang, startFakeModel, textResponse } from './support/fake-model.mts'
 import {
   answer,
   get,
@@ -43,8 +43,8 @@ afterEach(async () => {
 
 // A Codex home per test, its provider the fake: the person's ~/.codex is never read, and no login is needed.
 // gpt-5.5 calls exec_command itself; newer models wrap tools in code mode (codex-acp's integration tests).
-// Plugins off: with them Codex reaches chatgpt.com and github.com at startup.
-const box = () => {
+// Plugins off: with them Codex reaches chatgpt.com and github.com at startup. features: more of Codex's own.
+const box = (features: string[] = []) => {
   const b = sandbox()
   const codexHome = join(b.root, 'codex-home')
   mkdirSync(codexHome)
@@ -60,6 +60,7 @@ const box = () => {
       'wire_api = "responses"',
       '[features]',
       'plugins = false',
+      ...features,
       '',
     ].join('\n'),
   )
@@ -141,4 +142,36 @@ test('an interrupt cancels the turn and runs its text next, in the same session'
   )
   assert.equal(answer(run.events), 'REDIRECTED')
   assert.match(JSON.stringify(fake.requests.at(-1)?.input), /Stop\. Reply with only the word REDIRECTED\./)
+})
+
+// Codex asks with request_user_input, outside Plan mode only with its feature on; codex-acp asks the client.
+test("Codex's own question reaches the relay as a form, and the person's choice reaches the model", { skip }, async () => {
+  const b = box(['default_mode_request_user_input = true'])
+  const question = {
+    id: 'target',
+    header: 'Target',
+    question: 'Which target?',
+    options: [
+      { label: 'staging', description: 'safe' },
+      { label: 'production', description: 'live' },
+    ],
+  }
+  fake.enqueue(functionCallResponse('call_q', 'request_user_input', { questions: [question] }))
+  fake.enqueue(textResponse('DONE'))
+  const run = startRelay({ agent: ['node', codexAcp], prompt: 'go', cwd: b.work, env: { ...b.env, RELAY_INBOX: b.inbox } })
+  await run.until((line) => relayEvent([line], 'question') !== undefined)
+  const asked = relayEvent(run.events, 'question')
+  assert.equal(asked?.mode, 'form')
+  // Codex's choices, as titled options of the question's field.
+  const choices = get(asked, 'requestedSchema', 'properties', 'target', 'oneOf')
+  assert.ok(Array.isArray(choices))
+  assert.deepEqual(
+    choices.slice(0, 2).map((c) => get(c, 'const')),
+    ['staging', 'production'],
+  )
+  send(b.inbox, { question: asked?.id, answer: { action: 'accept', content: { target: 'production' } } })
+  assert.equal(await run.exited, 0, run.stderr)
+  const output = (fake.requests[1]?.input ?? []).find((i) => i.type === 'function_call_output' && i.call_id === 'call_q')
+  assert.deepEqual(JSON.parse(String(get(output, 'output'))), { answers: { target: { answers: ['production'] } } })
+  assert.deepEqual(fake.unexpected, [])
 })

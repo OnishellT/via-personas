@@ -1,7 +1,7 @@
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 
 import { codexMode } from '../../hooks/adapters/codex'
-import { agentStore, ROOT, runTurn, STEP } from '../helpers'
+import { agentStore, ROOT, run, runTurn, STEP } from '../helpers'
 
 type TestOn = Parameters<TestBody>[1]
 type Spawn = { argv: string[]; input: string | undefined; env?: Record<string, string> }
@@ -94,6 +94,10 @@ function arrange(
     homeCodex?: boolean
     nodes?: string[][] // every node command via ran
     acp?: string[] // the folders ~/.claude/via/acp holds
+    // Stands in for the step server on a call that reaches it: what it was called with, and its result, which a
+    // tool.call hook reads as the MCP tool's content blocks (as Claude Code 2.1.325 gives it).
+    step?: { called: Record<string, unknown>[]; result: () => unknown }
+    unheld?: boolean // the stream goes on past a question without waiting for its answer
   } = {},
 ) {
   const clock = mock.clock(on)
@@ -160,6 +164,12 @@ function arrange(
     o.asked?.push(question, ...(e.questions[0]?.options ?? []).map((x: { label: string }) => x.label))
     return { result: { questions: e.questions, answers: { [question]: o.answer ?? 'Allow once' } } }
   })
+  const step = o.step
+  if (step)
+    on('tool.call', { tool: 'mcp__plugin_via_step__step' as 'Bash' }, (_, e) => {
+      step.called.push({ ...e })
+      return { result: step.result() as never }
+    })
   on('process.spawn', async function* (_, e) {
     spawns.push({ argv: [...e.argv], input: e.input, env: e.env })
     if (o.pause) {
@@ -167,7 +177,7 @@ function arrange(
       await o.pause.until
     }
     // Like the relay, a stream with a question waits for its answer before going on.
-    const [before, after] = (out.stdout ?? '').split(/(?<="relay":"ask"[^\n]*\n)/)
+    const [before, after] = o.unheld ? [out.stdout ?? ''] : (out.stdout ?? '').split(/(?<="relay":"(?:ask|question)"[^\n]*\n)/)
     if (before) yield { stream: 'stdout' as const, text: before }
     if (after !== undefined) {
       await answer
@@ -461,6 +471,151 @@ test('a dismissed or unanswered question is a deny', async ($, on) => {
   await runTurn($)
   const inbox = writes.filter((w) => w.path.endsWith('/inbox/codex-a1.jsonl')).flatMap((w) => w.text.split('\n'))
   expect(inbox).toContain(JSON.stringify({ answer: '7-k1-1', optionId: 'abort' }))
+})
+
+const QUESTION = {
+  relay: 'question',
+  id: '7-k1-q1',
+  mode: 'form',
+  message: 'Which target?',
+  requestedSchema: { type: 'object', properties: { target: { type: 'string', enum: ['staging', 'production'] } } },
+}
+const replied = (reply: object) => () => [{ type: 'text', text: JSON.stringify(reply) }]
+const inboxOf = (writes: Write[]) => writes.filter((w) => w.path.endsWith('/inbox/codex-a1.jsonl')).flatMap((w) => w.text.split('\n'))
+
+test("codex's question goes to the step server, which asks in Claude Code's own form, and the reply goes to the inbox", async ($, on) => {
+  const writes: Write[] = []
+  const step = { called: [] as Record<string, unknown>[], result: replied({ action: 'accept', content: { target: 'staging' } }) }
+  arrange(on, [], { stdout: lines([...CAPTURED.slice(0, 3), QUESTION, ...CAPTURED.slice(10)]) }, { writes, step })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const { calls } = await runTurn($)
+  const { relay: _, ...question } = QUESTION
+  expect(step.called).toHaveLength(1)
+  expect(step.called[0]).toMatchObject({ kind: 'question', title: 'Which target?', question })
+  expect(inboxOf(writes)).toContain(JSON.stringify({ question: '7-k1-q1', answer: { action: 'accept', content: { target: 'staging' } } }))
+  // The row says what the person answered.
+  expect(calls).toContainEqual({ result: 'Answered: {"target":"staging"}' })
+})
+
+test('a question the step server leaves unanswered goes back to codex as a cancel', async ($, on) => {
+  const writes: Write[] = []
+  const step = {
+    called: [] as Record<string, unknown>[],
+    result: () => [{ type: 'text', text: 'via could not report this harness tool call.' }],
+  }
+  arrange(on, [], { stdout: lines([...CAPTURED.slice(0, 3), QUESTION, ...CAPTURED.slice(10)]) }, { writes, step })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const { calls } = await runTurn($)
+  expect(inboxOf(writes)).toContain(JSON.stringify({ question: '7-k1-q1', answer: { action: 'cancel' } }))
+  expect(calls).toContainEqual({ result: 'Not answered' })
+})
+
+test('a question codex closes before the person answers ends the wait, and nothing goes to the inbox', async ($, on) => {
+  const writes: Write[] = []
+  // The person never answers: the turn ends only if the closed line ends the wait, and with no answer nothing
+  // can reach the inbox.
+  const step = { called: [] as Record<string, unknown>[], result: () => new Promise(() => {}) }
+  const closed = { relay: 'question_closed', id: QUESTION.id }
+  arrange(on, [], { stdout: lines([...CAPTURED.slice(0, 3), QUESTION, closed, ...CAPTURED.slice(10)]) }, { writes, step, unheld: true })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const { calls, result } = await runTurn($)
+  expect(calls).toContainEqual({ result: 'No longer needed: the harness moved on before you answered.' })
+  // The run read on: codex's answer after the question is the agent's.
+  expect(result.answer).toContain('REDIRECTED')
+  expect(inboxOf(writes).some((line) => line.includes('"question"'))).toBe(false)
+})
+
+test("a question's shown text loses the characters that hide or reorder it; its values, and a link's site, are kept", async ($, on) => {
+  const hidden = '\u202e\u200b'
+  const sneaky = {
+    ...QUESTION,
+    message: `Which${hidden} target?`,
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', title: `Tar${hidden}get`, enum: [`a${hidden}`, 'b'], enumNames: [`A${hidden}`, 'B'] },
+        // Shown by their values: given cleaned names, the values kept.
+        size: { type: 'string', enum: [`s${hidden}`, 'm'], default: `m${hidden}` },
+        speed: { type: 'string', oneOf: [{ const: `f${hidden}` }, { const: 'slow', title: 'Slow' }] },
+        [`no${hidden}te`]: { type: 'string' },
+      },
+    },
+  }
+  const link = {
+    relay: 'question',
+    id: '7-k1-q2',
+    mode: 'url',
+    message: `Sign${hidden} in`,
+    url: 'https://example.com/login',
+    elicitationId: 'e1',
+  }
+  const step = { called: [] as Record<string, unknown>[], result: replied({ action: 'decline' }) }
+  // A link to a file never becomes a question, whatever line carries it.
+  const file = { ...link, id: '7-k1-q3', url: 'file:///etc/passwd' }
+  arrange(on, [], { stdout: lines([...CAPTURED.slice(0, 3), sneaky, link, file, ...CAPTURED.slice(10)]) }, { step })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  await runTurn($)
+  expect(step.called[0]?.question).toEqual({
+    id: '7-k1-q1',
+    mode: 'form',
+    message: 'Which target?',
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', title: 'Target', enum: [`a${hidden}`, 'b'], enumNames: ['A', 'B'] },
+        size: { type: 'string', enum: [`s${hidden}`, 'm'], enumNames: ['s', 'm'], default: 'm' },
+        speed: {
+          type: 'string',
+          oneOf: [
+            { const: `f${hidden}`, title: 'f' },
+            { const: 'slow', title: 'Slow' },
+          ],
+        },
+        [`no${hidden}te`]: { type: 'string', title: 'note' },
+      },
+    },
+  })
+  expect(step.called[1]?.question).toMatchObject({ message: 'Sign in (opens example.com)', url: 'https://example.com/login' })
+  expect(step.called).toHaveLength(2)
+})
+
+// The question call is the one step call that reaches Claude Code's permission check: auto mode's classifier
+// gave it no verdict live (2026-11-16), so via settles the mode's ask on its own question call, and only that.
+test("via settles only the mode's ask on its own question call: a deny, a rule's ask, or another call's still stands", async ($, on) => {
+  const step = { called: [] as Record<string, unknown>[], result: replied({ action: 'decline' }) }
+  arrange(on, [], { stdout: lines([...CAPTURED.slice(0, 3), QUESTION, ...CAPTURED.slice(10)]) }, { step })
+  let verdict: { decision: 'allow' | 'ask' | 'deny'; rule?: string } = { decision: 'ask' }
+  on('tool.check', () => verdict)
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const first = await run($)
+  const tool = first.chunks.find((c) => c.kind === 'tool')
+  const id = tool?.kind === 'tool' ? tool.id : ''
+  const input = { kind: 'question', title: 'Which target?' }
+  const check = (tool_use_id: string, called: object = input) =>
+    $.tool.check({ tool: 'mcp__plugin_via_step__step', input: called, tool_use_id, agentId: 'a1' } as never)
+  expect((await check(id)).decision).toBe('allow')
+  // A model's call, or via's call for a harness tool call, which never reaches the check's decider.
+  expect((await check('toolu_forged')).decision).toBe('ask')
+  expect((await check(id, { kind: 'execute', title: 'rm -rf /' })).decision).toBe('ask')
+  verdict = { decision: 'deny' }
+  expect((await check(id)).decision).toBe('deny')
+  verdict = { decision: 'ask', rule: 'mcp__plugin_via_step__step' }
+  expect((await check(id)).decision).toBe('ask')
+})
+
+test("a question call via didn't make is refused, never let through to the step server", async ($, on) => {
+  const step = { called: [] as Record<string, unknown>[], result: replied({ action: 'accept', content: {} }) }
+  arrange(on, [], undefined, { step })
+  const { relay: _, ...question } = QUESTION
+  const said = await $.tool.call({
+    tool: 'mcp__plugin_via_step__step',
+    tool_use_id: 'toolu_forged',
+    kind: 'question',
+    title: 'q',
+    question,
+  } as never)
+  expect(said).toMatchObject({ deny: expect.any(String) })
+  expect(step.called).toHaveLength(0)
 })
 
 // Which levels a model has is codex's to say: the relay checks the line against what the session offers.

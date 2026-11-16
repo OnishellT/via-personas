@@ -25,6 +25,8 @@ export type Norm =
   | { readonly k: 'notice'; readonly t: string } // said after the answer, as part of it
   | { readonly k: 'interrupted' } // the harness took an interrupt itself: nothing for the core to rerun
   | { readonly k: 'ask'; readonly ask: Ask } // a permission question for the person; the core writes the answer to the inbox
+  | { readonly k: 'question'; readonly question: Question } // a question the harness asks the person (ACP elicitation)
+  | { readonly k: 'question-closed'; readonly id: string } // one that no longer needs an answer: an interrupt, or the harness withdrew it
   // A subagent the harness started (ACP's subagent_update), announced or updated: parent is the session that
   // owns it, state its current work (idle: done for now), failure why its work ended, when it failed or
   // ended unfinished; cancelled, when its work was cancelled (most often by its parent's interrupt).
@@ -47,6 +49,14 @@ export type Ask = {
   readonly command?: string
   readonly options: readonly { readonly optionId: string; readonly name: string; readonly kind: string }[]
 }
+
+// A harness's question to the person, as the relay prints it: MCP's elicitation request, which ACP's is adapted
+// from, so a client that shows MCP's form can show it unchanged. form: fields to fill (a JSON Schema object);
+// url: a page to open, as for a sign-in.
+export type Question = { readonly id: string; readonly message: string } & (
+  | { readonly mode: 'form'; readonly requestedSchema: Readonly<Record<string, unknown>> }
+  | { readonly mode: 'url'; readonly url: string; readonly elicitationId: string }
+)
 
 // Claude Code's permission mode, as the spawn carried it: what the person allows Claude itself.
 export type Mode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions' | 'dontAsk'

@@ -6,7 +6,18 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFi
 import { join } from 'node:path'
 import { test } from 'node:test'
 import type { ClientCapabilities } from '@agentclientprotocol/sdk/unstable'
-import { answer, get, type Printed, relayEvent, runRelay, sandbox, send, startRelay, updates } from './support/relay-run.mts'
+import {
+  answer,
+  get,
+  type Printed,
+  relayEvent,
+  relayEventsNamed,
+  runRelay,
+  sandbox,
+  send,
+  startRelay,
+  updates,
+} from './support/relay-run.mts'
 
 const agent = ['node', new URL('./fake-agent.mts', import.meta.url).pathname]
 
@@ -47,6 +58,8 @@ test('the relay offers streamed command output, no terminal of its own, and no p
   assert.equal(get(offered, '_meta', 'terminal_output_delta'), true)
   assert.equal(offered.terminal, false)
   assert.deepEqual(get(offered, 'session', 'notices'), {})
+  // Questions to the person, both kinds, which Claude Code's own elicitation form shows.
+  assert.deepEqual(get(offered, 'elicitation'), { form: {}, url: {} })
 })
 
 test('an image under the working folder goes along to an agent that takes images; a missing, fake or outside one stays text', async () => {
@@ -205,4 +218,97 @@ test('with RELAY_POLICY=ask the request reaches the plugin as an ask, and its an
 
 test('with RELAY_POLICY=ask and no inbox no answer can come back, so the request is denied', async () => {
   assert.equal(answer((await fake({ FAKE_ASK: '1', RELAY_POLICY: 'ask' })).events), 'chose reject_once')
+})
+
+/** A run whose agent asks the person one question (FAKE_QUESTION): the question the relay printed, and the run. */
+const questioned = async (kind: 'form' | 'url') => {
+  const b = sandbox()
+  const run = startRelay({ agent, prompt: 'hi', cwd: b.work, env: { FAKE_QUESTION: kind, RELAY_INBOX: b.inbox } })
+  await run.until((line) => relayEvent([line], 'question') !== undefined)
+  const asked = relayEvent(run.events, 'question')
+  assert.ok(asked)
+  return { asked, run, reply: (value: unknown) => send(b.inbox, { question: asked.id, answer: value }) }
+}
+
+test("a harness's question goes out as a question line, without ACP's scope, and the person's answer goes back", async () => {
+  const { asked, run, reply } = await questioned('form')
+  assert.deepEqual(
+    { mode: asked.mode, message: asked.message, requestedSchema: asked.requestedSchema },
+    {
+      mode: 'form',
+      message: 'Which target?',
+      requestedSchema: {
+        type: 'object',
+        properties: { target: { type: 'string', enum: ['staging', 'production'] } },
+        required: ['target'],
+      },
+    },
+  )
+  assert.equal(get(asked, 'sessionId'), undefined)
+  reply({ action: 'accept', content: { target: 'production' } })
+  assert.equal(await run.exited, 0, run.stderr)
+  assert.equal(answer(run.events), 'got {"action":"accept","content":{"target":"production"}}')
+})
+
+test('a link question carries its link and id; a decline goes back as a decline', async () => {
+  const { asked, run, reply } = await questioned('url')
+  assert.deepEqual(
+    { mode: asked.mode, url: asked.url, elicitationId: asked.elicitationId },
+    { mode: 'url', url: 'https://example.com/login', elicitationId: 'e1' },
+  )
+  reply({ action: 'decline' })
+  assert.equal(await run.exited, 0, run.stderr)
+  assert.equal(answer(run.events), 'got {"action":"decline"}')
+})
+
+test('an answer that is no accept or decline goes back as a cancel', async () => {
+  const { run, reply } = await questioned('form')
+  reply({ action: 'maybe' })
+  assert.equal(await run.exited, 0, run.stderr)
+  assert.equal(answer(run.events), 'got {"action":"cancel"}')
+})
+
+test('an interrupt cancels a question still open', async () => {
+  const b = sandbox()
+  const run = startRelay({ agent, prompt: 'hi', cwd: b.work, env: { FAKE_QUESTION: 'form', RELAY_INBOX: b.inbox } })
+  await run.until((line) => relayEvent([line], 'question') !== undefined)
+  send(b.inbox, { interrupt: 'stop' })
+  // The interrupt's text runs next, and the fake asks again: answered, the run ends on its own.
+  await run.until(() => relayEventsNamed(run.events, 'question').length === 2)
+  const [first, second] = relayEventsNamed(run.events, 'question')
+  send(b.inbox, { question: second?.id, answer: { action: 'decline' } })
+  assert.equal(await run.exited, 0, run.stderr)
+  assert.equal(run.stderr.includes('stopped after'), false, run.stderr)
+  assert.equal(answer(run.events), 'got {"action":"cancel"}got {"action":"decline"}')
+  // Said, so the plugin stops waiting on the person for it; the answered one is not.
+  assert.deepEqual(
+    relayEventsNamed(run.events, 'question_closed').map((e) => e.id),
+    [first?.id],
+  )
+})
+
+test('with no inbox no answer can come back, so a question is cancelled', async () => {
+  assert.equal(answer((await fake({ FAKE_QUESTION: 'form' })).events), 'got {"action":"cancel"}')
+})
+
+test('a link to open that is no web page is cancelled, never shown', async () => {
+  const b = sandbox()
+  const r = await runRelay({
+    agent,
+    prompt: 'hi',
+    cwd: b.work,
+    env: { FAKE_QUESTION: 'url', FAKE_QUESTION_URL: 'file:///etc/passwd', RELAY_INBOX: b.inbox },
+  })
+  assert.equal(r.status, 0, r.stderr)
+  assert.equal(relayEvent(r.events, 'question'), undefined)
+  assert.equal(answer(r.events), 'got {"action":"cancel"}')
+})
+
+test('a question the agent withdraws is closed, said with its id, and nothing waits on the person', async () => {
+  const b = sandbox()
+  const r = await runRelay({ agent, prompt: 'hi', cwd: b.work, env: { FAKE_QUESTION: 'form', FAKE_WITHDRAW: '1', RELAY_INBOX: b.inbox } })
+  assert.equal(r.status, 0, r.stderr)
+  const asked = relayEvent(r.events, 'question')
+  assert.ok(asked)
+  assert.equal(relayEvent(r.events, 'question_closed')?.id, asked.id)
 })

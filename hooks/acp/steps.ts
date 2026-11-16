@@ -1,4 +1,5 @@
 import type { Timer, TurnStepChunk, TurnStepResult, TurnUsage } from 'claude-code'
+import type { Question } from './norm'
 import { NO_OUTPUT } from './render'
 
 // One step per harness tool call. A run outlives the step that started it: each tool call the
@@ -10,10 +11,16 @@ import { NO_OUTPUT } from './render'
 // A harness tool call starting or ending, for pump to make a call to the plugin's tool of; never reaches the engine.
 // usage: the run's last model call, for the step that ends with the call.
 export type Mark =
-  | { kind: 'call-start'; id: string; input: { kind: string; title: string; path?: string }; usage: TurnUsage | null }
+  | { kind: 'call-start'; id: string; input: CallInput; usage: TurnUsage | null }
   | { kind: 'call-end'; id: string; output: string; failed: boolean }
+  // A question no longer needing an answer: the hook waiting on the person for it stops.
+  | { kind: 'question-closed'; id: string }
   // A harness's subagent to show as an agent nested under this one: the step calls the Agent tool.
   | { kind: 'spawn'; child: string; type: string; title: string; description?: string }
+// What a step call carries: the harness's call, or its question to the person, which the step server asks
+// through Claude Code's own form (MCP elicitation).
+export type CallInput = { kind: string; title: string; path?: string; question?: Question }
+
 // A harness run that outlives its step: steps and the tool's tool.call hook take turns reading it.
 // held: what a tool.call hook read past its call, for the next step; outputs: finished calls by the
 // harness's id; final: the run's last step, once it ended.
@@ -34,12 +41,15 @@ export type Steps = {
   tool: string
   spawns: Map<string, string> // by an Agent tool_use id a step made: the harness subagent it shows
   jobs: Map<string, Job> // by agent id
-  calls: Map<string, { agentId: string; id: string }> // by tool_use_id: the harness's own call id
+  // By tool_use_id: the harness's own call id; question, when the call asks the person (the hook lets it through).
+  calls: Map<string, { agentId: string; id: string; question?: true }>
 }
 
 // The Agent calls a step makes for a harness's subagents: approved without the mode's classifier, which
 // judges only a model's own calls, and their nested agents run as via's.
 export const CHILD_CALL = 'toolu_via_child_'
+// The calls a step makes for a harness's own tool calls and questions: ids no model request can carry.
+export const STEP_CALL = 'toolu_step_'
 
 // What a run ended early answers its next step: an aborted run's end of turn, as drive's own.
 function ended(turnId: string): TurnStepResult {
@@ -170,6 +180,8 @@ export async function* pump(
         job.outputs.set(c.id, { output: c.output, failed: c.failed })
         continue
       }
+      // Its question's hook has already answered: nothing waits on it.
+      if (c.kind === 'question-closed') continue
       if (c.kind === 'spawn') {
         job.count += 1
         const id = `${CHILD_CALL}${e.turnId.replace(/[^A-Za-z0-9_]/g, '_')}_${job.count}`
@@ -183,8 +195,8 @@ export async function* pump(
       }
       if (c.kind === 'call-start') {
         job.count += 1
-        const id = `toolu_step_${e.turnId.replace(/[^A-Za-z0-9_]/g, '_')}_${job.count}`
-        w.calls.set(id, { agentId: e.agentId ?? '', id: c.id })
+        const id = `${STEP_CALL}${e.turnId.replace(/[^A-Za-z0-9_]/g, '_')}_${job.count}`
+        w.calls.set(id, { agentId: e.agentId ?? '', id: c.id, ...(c.input.question ? { question: true as const } : {}) })
         const index = block(-1 - job.count)
         yield { kind: 'tool', index, id, name: w.tool }
         yield { kind: 'input', index, json: JSON.stringify(c.input) }
@@ -202,6 +214,37 @@ export async function* pump(
     }
   } finally {
     unlend()
+  }
+}
+
+// While the person is asked a question: reads the run on until the harness closes that question (an interrupt,
+// or it withdrew it) or the run ends, keeping whatever else it says for the next step. Stops reading when
+// `stop` aborts (the person answered), leaving its read pending for the next step to take.
+export async function questionClosed(w: Pick<Steps, 'jobs'>, ref: { agentId: string; id: string }, stop: AbortSignal): Promise<boolean> {
+  const job = w.jobs.get(ref.agentId)
+  if (job === undefined) return true
+  const stopped = new Promise<'stopped'>((resolve) => {
+    if (stop.aborted) resolve('stopped')
+    stop.addEventListener('abort', () => resolve('stopped'), { once: true })
+  })
+  for (;;) {
+    if (job.final !== undefined || halted(job)) return true
+    const r = await Promise.race([read(job).catch(() => 'failed' as const), stopped])
+    if (r === 'stopped') return false
+    if (r === 'failed') {
+      // The producer failed: end the run, as answerCall does.
+      job.abort.abort()
+      job.final ??= { ...ended(job.turnId), answer: NOT_FOLLOWED }
+      return true
+    }
+    job.reading = undefined
+    if (r.done) {
+      job.final = r.value ?? ended(job.turnId)
+      return true
+    }
+    if (r.value.kind === 'question-closed' && r.value.id === ref.id) return true
+    if (r.value.kind === 'call-end') job.outputs.set(r.value.id, { output: r.value.output, failed: r.value.failed })
+    else job.held.push(r.value)
   }
 }
 

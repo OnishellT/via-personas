@@ -1,4 +1,5 @@
 import type { EngineInterface, MatchedHook } from 'claude-code'
+import { questionClosed } from './acp/steps'
 import { unhidden } from './acp/text'
 import type { Ask } from './adapter'
 import type { World } from './world'
@@ -136,7 +137,66 @@ export async function answerAsk(
   void $.ui.notify(`${name} needs your answer`).catch(() => {})
   const picked = await $.ui.ask(question, [...choices.keys()]).catch(() => undefined)
   const optionId = picked !== undefined && choices.has(picked) ? (choices.get(picked) ?? null) : (deny?.optionId ?? null)
+  await answered($, inboxes, agentId, inbox, { answer: ask.id, optionId })
+}
+
+// An answer into the inbox it was asked from: not into one a later run opened in its place.
+async function answered($: Pick<EngineInterface, 'fs'>, inboxes: Map<string, Inbox>, agentId: string, inbox: Inbox, line: object) {
   if (inboxes.get(agentId) !== inbox) return
-  inbox.lines = [...inbox.lines, JSON.stringify({ answer: ask.id, optionId })]
-  await $.fs.write(inbox.path, inbox.lines.map((line) => `${line}\n`).join('')).catch(() => {})
+  inbox.lines = [...inbox.lines, JSON.stringify(line)]
+  await $.fs.write(inbox.path, inbox.lines.map((l) => `${l}\n`).join('')).catch(() => {})
+}
+
+// What the person did with a question: MCP's elicitation result, as Claude Code's form returns it.
+type Reply = { action: 'accept'; content: Record<string, unknown> } | { action: 'decline' } | { action: 'cancel' }
+const CANCEL: Reply = { action: 'cancel' }
+
+// The step server's answer, as a tool.call hook reads an MCP tool's result: its content blocks, the first a text
+// block holding the reply as JSON. Anything else is a cancel.
+function replyOf(result: unknown): Reply {
+  const text = Array.isArray(result) ? (result[0] as { text?: unknown } | undefined)?.text : undefined
+  let reply: { action?: unknown; content?: unknown } = {}
+  try {
+    reply = typeof text === 'string' ? (JSON.parse(text) as typeof reply) : {}
+  } catch {}
+  if (reply.action === 'accept')
+    return {
+      action: 'accept',
+      content: typeof reply.content === 'object' && reply.content !== null ? (reply.content as Record<string, unknown>) : {},
+    }
+  return reply.action === 'decline' ? { action: 'decline' } : CANCEL
+}
+
+const SAID: Record<Reply['action'], string> = { accept: 'Answered', decline: 'Declined', cancel: 'Not answered' }
+const CLOSED = 'No longer needed: the harness moved on before you answered.'
+
+// The tool.call hook on a step call that asks the person: let through to the step server, which asks in Claude
+// Code's own form (MCP elicitation) and returns the reply; the reply goes back to the harness through the inbox.
+// No answer (a refused call, a headless session) goes back as a cancel. A question the harness closes first (an
+// interrupt, or it withdrew it) ends the wait: the relay has cancelled it, and a later answer would go nowhere.
+export async function answerQuestion(
+  $: Pick<EngineInterface, 'fs'>,
+  w: Pick<World, 'calls' | 'inboxes' | 'jobs'>,
+  toolUseId: string,
+  ask: () => Promise<{ result?: unknown } | { deny: string }>,
+): Promise<{ result: string }> {
+  const ref = w.calls.get(toolUseId)
+  w.calls.delete(toolUseId)
+  const inbox = ref === undefined ? undefined : w.inboxes.get(ref.agentId)
+  const settled = new AbortController()
+  const closed = ref === undefined ? new Promise<never>(() => {}) : questionClosed(w, ref, settled.signal)
+  const done = await Promise.race([
+    ask().catch(() => ({ deny: '' })),
+    closed.then((yes) => (yes ? ('closed' as const) : new Promise<never>(() => {}))),
+  ])
+  settled.abort()
+  if (done === 'closed') return { result: CLOSED }
+  const reply = 'deny' in done ? CANCEL : replyOf(done.result)
+  if (ref !== undefined && inbox !== undefined) await answered($, w.inboxes, ref.agentId, inbox, { question: ref.id, answer: reply })
+  return {
+    result:
+      reply.action === 'accept' && Object.keys(reply.content).length > 0
+        ? `${SAID.accept}: ${JSON.stringify(reply.content)}`
+        : SAID[reply.action],
+  }
 }

@@ -10321,6 +10321,9 @@ var CAPABILITIES = {
   // notices: codex-acp then sends its warnings as notices, not as text in the answer.
   session: { compaction: {}, notices: {} },
   subagents: {},
+  // A harness's questions to the person (ACP elicitation, adapted from MCP's): printed as {"relay":"question"}
+  // lines, which via asks through Claude Code's own MCP elicitation form.
+  elicitation: { form: {}, url: {} },
   _meta: { terminal_output_delta: true }
 };
 var dash = process.argv.indexOf("--");
@@ -10363,6 +10366,32 @@ agent.on("exit", (code) => {
 var RUN = `${process.pid}-${Date.now().toString(36)}`;
 var asked = /* @__PURE__ */ new Map();
 var asks = 0;
+var questions = /* @__PURE__ */ new Map();
+var CANCEL = { action: "cancel" };
+var closeQuestion = (id) => {
+  const answerIt = questions.get(id);
+  if (answerIt === void 0) return;
+  questions.delete(id);
+  out({ relay: "question_closed", id });
+  answerIt(CANCEL);
+};
+var question = (request) => request.mode === "url" ? { mode: "url", message: request.message, url: request.url, elicitationId: request.elicitationId } : { mode: "form", message: request.message, requestedSchema: "requestedSchema" in request ? request.requestedSchema : void 0 };
+var web = (url2) => {
+  try {
+    return ["https:", "http:"].includes(new URL(String(url2)).protocol);
+  } catch {
+    return false;
+  }
+};
+var answered = (value) => {
+  const answer = typeof value === "object" && value !== null ? value : {};
+  if (answer.action === "accept")
+    return {
+      action: "accept",
+      content: typeof answer.content === "object" && answer.content !== null ? answer.content : {}
+    };
+  return answer.action === "decline" ? { action: "decline" } : CANCEL;
+};
 var choose = (options, kind) => {
   const option = options.find((o) => o.kind === kind);
   return { outcome: option ? { outcome: "selected", optionId: option.optionId } : { outcome: "cancelled" } };
@@ -10391,6 +10420,16 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
       (optionId) => resolve(optionId ? { outcome: { outcome: "selected", optionId } } : { outcome: { outcome: "cancelled" } })
     )
   );
+}).onRequest(methods.client.elicitation.create, (ctx) => {
+  if (!process.env.RELAY_INBOX) return CANCEL;
+  if (ctx.params.mode === "url" && !web(ctx.params.url)) return CANCEL;
+  const id = `${RUN}-q${++asks}`;
+  out({ relay: "question", id, ...question(ctx.params) });
+  return new Promise((resolve) => {
+    questions.set(id, resolve);
+    if (ctx.signal.aborted) closeQuestion(id);
+    else ctx.signal.addEventListener("abort", () => closeQuestion(id), { once: true });
+  });
 }).onNotification(methods.client.session.update, (ctx) => {
   if (!busy && ctx.params.update.sessionUpdate === "agent_message_chunk") spokeIdle = true;
   out(ctx.params);
@@ -10533,6 +10572,10 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
         if (typeof value === "string") {
           if (busy && interrupt === void 0 && process.env.RELAY_STEER) steer(value);
           else queue.push(value);
+        } else if (typeof value === "object" && value !== null && "question" in value) {
+          const { question: id, answer } = value;
+          questions.get(id)?.(answered(answer));
+          questions.delete(id);
         } else if (typeof value === "object" && value !== null && "answer" in value) {
           const { answer, optionId } = value;
           asked.get(answer)?.(optionId ?? null);
@@ -10546,6 +10589,7 @@ ${text2}`;
             answerIt(null);
             asked.delete(id);
           }
+          for (const id of [...questions.keys()]) closeQuestion(id);
           void ctx.notify(methods.agent.session.cancel, { sessionId });
         }
       }

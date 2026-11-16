@@ -1,7 +1,7 @@
 import type { ProcessSpawnRequest, ProcessSpawnResult } from 'claude-code'
 import type { Choice } from '../types'
 
-export type { Ask, Mode, Norm, Usage } from './acp/norm'
+export type { Ask, Mode, Norm, Question, Usage } from './acp/norm'
 
 import type { Mode, Norm } from './acp/norm'
 
