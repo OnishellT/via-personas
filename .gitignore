@@ -5,3 +5,6 @@ node_modules/
 
 # testy, built for relay/test/testy.test.mts
 ci/testy/target/
+
+# claude plugin eval output (pnpm eval)
+evals/results/

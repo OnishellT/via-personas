@@ -17,6 +17,6 @@
 - A test waits on the event it needs: a model request, a line the relay prints, a notification, a file the command under test writes in one step. Never on time. Each wait fails when the process it waits on ends. The only timers are backstops that end a hung run: `relay/test/support/backstop.mts`, a spawned process's `timeout`, a test's `timeout`.
 - A test checks behaviour where it crosses a boundary: what the relay prints, what a harness or model receives, what Claude reads. Not internal shapes.
 - A new test fails without the change it covers. Show it before committing.
-- No tokens and nothing of yours: the fake agent, the fake model and an empty HOME, no network beyond localhost. What only a real model can show goes in an eval, with a cost cap.
+- No tokens and nothing of yours: the fake agent, the fake model and an empty HOME, no network beyond localhost. What only a real model can show goes in an eval (`evals/`, `pnpm eval`), with a cost cap.
 - A version a test depends on lives where Dependabot bumps it.
 - `pnpm lint` holds every test in the repository to the first two (`checks/tests.mts`).
