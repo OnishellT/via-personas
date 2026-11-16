@@ -104,14 +104,29 @@ test("a subagent's task is its nested agent's prompt, and a follow-up after it w
   expect(answer).toContain('DONE')
 })
 
-test("a subagent's role is not its task: shown beside its title, unless it is codex's `default`", async ($, on) => {
-  const announce = (description: string) => ({
-    sessionId: ROOT,
-    update: { sessionUpdate: 'subagent_update', sessionId: CHILD, title: 'Kestrel', description, capabilities: {} },
-  })
-  arrange(on, [RECORDED[0], RECORDED[1], announce('explorer'), ...RECORDED.slice(3, 10), { relay: 'done', stopReason: 'end_turn' }])
+const ROLE_RUN = (announce: unknown) => [
+  RECORDED[0],
+  RECORDED[1],
+  announce,
+  ...RECORDED.slice(3, 10),
+  { relay: 'done', stopReason: 'end_turn' },
+]
+const announce = (description: string) => ({
+  sessionId: ROOT,
+  update: { sessionUpdate: 'subagent_update', sessionId: CHILD, title: 'Kestrel', description, capabilities: {} },
+})
+
+test("a subagent's role is not its task: shown beside its title", async ($, on) => {
+  arrange(on, ROLE_RUN(announce('explorer')))
   expect((await agentCalls($)).calls).toEqual([
     { description: 'Kestrel (explorer)', prompt: TASK, subagent_type: 'via:codex', run_in_background: true },
+  ])
+})
+
+test("codex's role `default` says nothing, so only the title shows", async ($, on) => {
+  arrange(on, ROLE_RUN(announce('default')))
+  expect((await agentCalls($)).calls).toEqual([
+    { description: 'Kestrel', prompt: TASK, subagent_type: 'via:codex', run_in_background: true },
   ])
 })
 
@@ -132,8 +147,8 @@ test("a task with no announcement or outgoing view still reaches the nested agen
 })
 
 test("a follow-up sent while the subagent works is a row in its nested agent's view, said once and not its answer", async ($, on) => {
-  // Recorded the same day with the follow-up sent before the child's first reply: Codex dropped that reply and
-  // asked again with both messages, so the child's one answer follows the follow-up.
+  // The order of the day's recording with the follow-up sent before the child's first reply (relay/test/
+  // real-codex.test.mts): its messages, then the child's one answer. Codex dropped the reply it was writing.
   arrange(on, [
     ...RECORDED.slice(0, 8),
     outgoing('followup', FOLLOWUP),

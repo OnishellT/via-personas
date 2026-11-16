@@ -336,31 +336,82 @@ export function relayEvents(from = 'the agent'): (line: string) => Norm[] {
   let root: string | undefined
   const own = sessionEvents(() => cwd, from)
   const children = new Map<string, ReturnType<typeof sessionEvents>>()
-  // A message between sessions (ACP's session_message): a subagent's task or a later instruction, as the sender's
-  // outgoing view or the subagent's incoming one. An agent that sees both sides sends both, linked by id
-  // (codex-acp: the outgoing first, linked by a later update): the first view is said, the other skipped. A
-  // view with no content (a link added later) and a message to the run's own session say nothing.
-  const heard = new Set<string>() // `${session}\n${messageId}` of each view seen
-  const told = (u: Extract<SessionUpdate, { sessionUpdate: 'session_message' }>, session: string): Norm[] => {
-    if (typeof u.messageId !== 'string' || !Array.isArray(u.content)) return []
-    const self = `${session}\n${u.messageId}`
-    if (heard.has(self)) return []
-    heard.add(self)
-    const outgoing = typeof u.recipientSessionId === 'string' && u.recipientSessionId !== session
-    const to = outgoing ? String(u.recipientSessionId) : session
-    const other = outgoing
-      ? typeof u.recipientMessageId === 'string' && `${to}\n${u.recipientMessageId}`
-      : typeof u.senderSessionId === 'string' && typeof u.senderMessageId === 'string' && `${u.senderSessionId}\n${u.senderMessageId}`
-    if (to === root || (other && heard.has(other))) return []
-    // The view this one names, when it comes second unlinked, is the same message.
-    if (other) heard.add(other)
-    const t = u.content
+  // Messages between sessions (ACP's session_message and its chunks): a subagent's task or a later instruction,
+  // as the sender's outgoing view or the recipient's incoming one, each an upsert by its id in its own session
+  // (omitted: unchanged; null: cleared; a value: replaced) that chunks append to. A message is said once its
+  // session moves on (another update of it, or a subagent_update of it; for a sender's view, its recipient's
+  // too) or the prompt ends: until then it may grow, or its other view come. A view is the sender's when it
+  // names another recipient, or no recipient yet and its own session as sender; the sender's waits for its
+  // recipient. Of two views linked by id, one is said: the recipient's when both wait, since delivery may
+  // change it. A message to the run's own session is said in its view; one to a subagent, in the subagent's.
+  type Message = { to?: string; from?: string; other?: string; blocks: unknown[]; said: boolean }
+  const messages = new Map<string, Message>() // by `${session}\n${messageId}`
+  const waiting = new Set<string>()
+  let kept = false
+  let moving: ReadonlySet<string> | undefined // the sessions the line moves on; every one when undefined
+  const outgoing = (m: Message, session: string) => (m.to !== undefined ? m.to !== session : m.from === session)
+  const entry = (key: string) => {
+    const found = messages.get(key)
+    if (found) return found
+    const made: Message = { blocks: [], said: false }
+    messages.set(key, made)
+    return made
+  }
+  const link = (a: string, b: string) => {
+    entry(a).other = b
+    entry(b).other = a
+  }
+  const said = (blocks: readonly unknown[]) =>
+    blocks
       .map((block) => blockText(block, from))
       .filter(Boolean)
-      .join('\n')
-    return t ? [{ k: 'of', child: to, norm: { k: 'told', t } }] : []
+      .join('')
+  const keep = (u: Extract<SessionUpdate, { sessionUpdate: 'session_message' | 'session_message_chunk' }>, session: string) => {
+    kept = true
+    if (typeof u.messageId !== 'string') return
+    const key = `${session}\n${u.messageId}`
+    const m = entry(key)
+    if (u.sessionUpdate === 'session_message_chunk') {
+      if (isRecord(u.content)) m.blocks.push(u.content)
+    } else {
+      const id = (value: unknown) => (typeof value === 'string' ? value : undefined)
+      if (u.recipientSessionId !== undefined) m.to = id(u.recipientSessionId)
+      if (u.senderSessionId !== undefined) m.from = id(u.senderSessionId)
+      if (u.content !== undefined) m.blocks = Array.isArray(u.content) ? [...u.content] : []
+      const sent = outgoing(m, session)
+      if (sent && m.to !== undefined && typeof u.recipientMessageId === 'string') link(key, `${m.to}\n${u.recipientMessageId}`)
+      if (!sent && m.from !== undefined && typeof u.senderMessageId === 'string') link(key, `${m.from}\n${u.senderMessageId}`)
+    }
+    if (!m.said) waiting.add(key)
   }
-  return (line) => {
+  const flush = (): Norm[] => {
+    const out: Norm[] = []
+    for (const key of waiting) {
+      const session = key.slice(0, key.indexOf('\n'))
+      const m = messages.get(key)
+      const sent = m !== undefined && outgoing(m, session)
+      // Its session moved on, or, for a sender's view, its recipient's: the task comes before the child's work.
+      if (moving !== undefined && !moving.has(session) && !(sent && m.to !== undefined && moving.has(m.to))) continue
+      // Its sender's view, still unaddressed: a later upsert names the recipient.
+      if (sent && m.to === undefined) continue
+      waiting.delete(key)
+      const other = m?.other === undefined ? undefined : messages.get(m.other)
+      if (m === undefined || m.said) continue
+      if (other?.said) {
+        m.said = true
+        continue
+      }
+      const t = said(m.blocks)
+      // No content yet, or the recipient's view waits too: a later upsert, or that view, says it.
+      if (!t || (sent && other !== undefined && said(other.blocks))) continue
+      m.said = true
+      if (other) other.said = true
+      const to = sent ? (m.to as string) : session
+      out.push(to === root ? { k: 'told', t } : { k: 'of', child: to, norm: { k: 'told', t } })
+    }
+    return out
+  }
+  const read = (line: string): Norm[] => {
     let e: unknown
     try {
       e = JSON.parse(line)
@@ -368,6 +419,9 @@ export function relayEvents(from = 'the agent'): (line: string) => Norm[] {
       return []
     }
     if (!isRecord(e)) return []
+    // Only the prompt's end, or a line not the relay's, says every message that waits: not a steer, which
+    // codex-acp takes mid-turn.
+    if (typeof e.relay === 'string' && !['prompt_done', 'interrupted', 'error', 'done'].includes(e.relay)) moving = new Set()
     switch (e.relay) {
       case 'session':
         if (typeof e.cwd === 'string' && e.cwd) cwd = e.cwd.replace(/\/+$/, '')
@@ -413,7 +467,11 @@ export function relayEvents(from = 'the agent'): (line: string) => Norm[] {
     if (!live || !isRecord(e.update) || typeof e.update.sessionUpdate !== 'string') return []
     const u = e.update as SessionUpdate
     const session = typeof e.sessionId === 'string' ? e.sessionId : root
-    if (u.sessionUpdate === 'session_message') return session === undefined ? [] : told(u, session)
+    moving = new Set([session, u.sessionUpdate === 'subagent_update' ? u.sessionId : undefined].filter((s) => typeof s === 'string'))
+    if (u.sessionUpdate === 'session_message' || u.sessionUpdate === 'session_message_chunk') {
+      if (session !== undefined) keep(u, session)
+      return []
+    }
     if (u.sessionUpdate === 'subagent_update') {
       if (typeof u.sessionId !== 'string' || session === undefined) return []
       const now = isRecord(u.state) ? u.state : undefined
@@ -453,6 +511,12 @@ export function relayEvents(from = 'the agent'): (line: string) => Norm[] {
       children.set(session, child)
     }
     return child.read(u).flatMap((norm): Norm[] => (SHOWN.has(norm.k) ? [{ k: 'of', child: session, norm }] : []))
+  }
+  return (line) => {
+    kept = false
+    moving = undefined
+    const norms = read(line)
+    return kept ? norms : [...flush(), ...norms]
   }
 }
 

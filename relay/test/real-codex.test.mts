@@ -229,14 +229,18 @@ test("a subagent's task and a follow-up sent while it works reach the relay as m
   // Each message: the parent's outgoing view, then the child's incoming one, linked to it.
   const views = notifications(run.events).flatMap(({ sessionId, update: u }) =>
     u.sessionUpdate === 'session_message' && u.content
-      ? [{ session: sessionId, to: u.recipientSessionId, linked: u.senderMessageId !== undefined, text: get(u, 'content', '0', 'text') }]
+      ? [{ session: sessionId, id: u.messageId, to: u.recipientSessionId, from: u.senderMessageId, text: get(u, 'content', '0', 'text') }]
       : [],
   )
-  assert.deepEqual(views, [
-    { session: root, to: child, linked: false, text: SPAWN },
-    { session: child, to: child, linked: true, text: SPAWN },
-    { session: root, to: child, linked: false, text: FOLLOWUP },
-    { session: child, to: child, linked: true, text: FOLLOWUP },
-  ])
+  const [spawn, , followup] = views
+  assert.deepEqual(
+    views.map(({ id: _, ...view }) => view),
+    [
+      { session: root, to: child, from: undefined, text: SPAWN },
+      { session: child, to: child, from: spawn?.id, text: SPAWN },
+      { session: root, to: child, from: undefined, text: FOLLOWUP },
+      { session: child, to: child, from: followup?.id, text: FOLLOWUP },
+    ],
+  )
   assert.equal(answer(run.events.filter((e) => !('sessionId' in e) || e.sessionId === root)), 'DONE')
 })

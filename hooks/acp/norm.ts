@@ -41,8 +41,8 @@ export type Norm =
       readonly cancelled?: boolean
     }
   | { readonly k: 'of'; readonly child: string; readonly norm: Norm } // what a subagent's own session said
-  // A message to a subagent from another session (ACP's session_message): its task, or a later instruction.
-  // Only ever inside `of`, for the subagent it went to.
+  // A message from another session (ACP's session_message): to a subagent, inside `of`, its task or a later
+  // instruction; to the run's own session, from its subagent or another session.
   | { readonly k: 'told'; readonly t: string }
 
 export type Ask = {

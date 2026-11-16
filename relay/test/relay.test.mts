@@ -334,6 +334,21 @@ test("what the agent sends as bytes is saved to RELAY_FILES, and printed with th
   assert.equal(get(image, '_meta', 'relay', 'size'), Buffer.from(PNG, 'base64').length)
 })
 
+test('an image in a message to a subagent is saved to RELAY_FILES, whole or as a chunk', async () => {
+  const files = join(sandbox().root, 'files')
+  const r = await fake({ FAKE_IMAGE: 'message', RELAY_FILES: files })
+  assert.equal(r.status, 0, r.stderr)
+  const blocks = updates(r.events).flatMap((u) =>
+    u.sessionUpdate === 'session_message' ? (u.content ?? []) : u.sessionUpdate === 'session_message_chunk' ? [u.content] : [],
+  )
+  assert.equal(blocks.length, 2)
+  for (const image of blocks) {
+    assert.ok(image.type === 'image')
+    assert.equal(image.data, '')
+    assert.deepEqual(readFileSync(String(get(image, '_meta', 'relay', 'saved'))), Buffer.from(PNG, 'base64'))
+  }
+})
+
 test("bytes that can't be saved are left out all the same, with the reason", async () => {
   const b = sandbox()
   const notAFolder = join(b.root, 'taken')

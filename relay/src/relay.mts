@@ -234,6 +234,11 @@ function savedUpdate(update: acp.SessionUpdate): acp.SessionUpdate {
       return update.content
         ? { ...update, content: update.content.map((c) => (c.type === 'content' ? { ...c, content: saved(c.content) } : c)) }
         : update
+    // A message between sessions (ACP's subagents RFD): whole, or a chunk of it.
+    case 'session_message':
+      return update.content ? { ...update, content: update.content.map(saved) } : update
+    case 'session_message_chunk':
+      return { ...update, content: saved(update.content) }
     default:
       return update
   }

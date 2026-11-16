@@ -12,6 +12,7 @@ export type Read = {
   usage_update: 'used'
   subagent_update: 'sessionId' | 'title' | 'description' | 'state'
   session_message: 'messageId' | 'senderSessionId' | 'recipientSessionId' | 'senderMessageId' | 'recipientMessageId' | 'content'
+  session_message_chunk: 'messageId' | 'content'
   config_option_update: 'configOptions'
   notice: 'severity' | 'title' | 'description'
 }

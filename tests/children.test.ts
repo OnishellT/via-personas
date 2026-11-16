@@ -93,42 +93,122 @@ test('a refused or limit-stopped subagent says why, by the same mapping as the r
   expect(idle('end_turn')).toEqual([child])
 })
 
-test("a message to a subagent is said once, whichever of its two views comes first; one to the run's own session is not", () => {
+// A parser past its first prompt, and the session_message updates of ACP's subagents RFD. A message is said once
+// its own session moves on: until then it may still grow, or its other view arrive.
+function messages() {
   const parse = relayEvents()
   parse(JSON.stringify(CAPTURED[0]))
   parse(JSON.stringify(CAPTURED[1]))
-  const message = (sessionId: string, update: Record<string, unknown>) =>
-    parse(JSON.stringify({ sessionId, update: { sessionUpdate: 'session_message', ...update } }))
-  const text = (t: string) => [{ type: 'text', text: t }]
-  // The child's incoming view first, unlinked; then the parent's outgoing view, which names it.
-  expect(message(CHILD, { messageId: 'in1', recipientSessionId: CHILD, content: text('Search acp.') })).toEqual([
-    { k: 'of', child: CHILD, norm: { k: 'told', t: 'Search acp.' } },
-  ])
-  expect(
-    message(ROOT, {
-      messageId: 'out1',
-      senderSessionId: ROOT,
-      recipientSessionId: CHILD,
-      recipientMessageId: 'in1',
-      content: text('Search acp.'),
-    }),
-  ).toEqual([])
-  // A view seen again, or a link added later, says nothing new.
-  expect(message(CHILD, { messageId: 'in1', recipientSessionId: CHILD, content: text('Search acp.') })).toEqual([])
-  expect(message(CHILD, { messageId: 'in1', senderSessionId: ROOT, senderMessageId: 'out1' })).toEqual([])
-  // The other order: the child's incoming view first, naming the outgoing one, which comes unlinked.
+  const send = (sessionUpdate: string, sessionId: string, update: Record<string, unknown>) =>
+    parse(JSON.stringify({ sessionId, update: { sessionUpdate, ...update } }))
+  return {
+    message: (sessionId: string, update: Record<string, unknown>) => send('session_message', sessionId, update),
+    chunk: (sessionId: string, messageId: string, t: string) =>
+      send('session_message_chunk', sessionId, { messageId, content: { type: 'text', text: t } }),
+    // Any other update, on the run's own session unless named; only what it says of messages. parse: any line.
+    moved: Object.assign(
+      (sessionId = ROOT) =>
+        send('usage_update', sessionId, { used: 1, size: 10 }).filter((n) => n.k === 'told' || (n.k === 'of' && n.norm.k === 'told')),
+      { parse: (line: unknown) => parse(JSON.stringify(line)) },
+    ),
+  }
+}
+const text = (t: string) => [{ type: 'text', text: t }]
+const toldChild = (t: string) => ({ k: 'of', child: CHILD, norm: { k: 'told', t } })
+
+test('a message to a subagent is said once the run moves on; with both its views waiting, as the child received it', () => {
+  const { message, moved } = messages()
+  expect(message(ROOT, { messageId: 'out1', senderSessionId: ROOT, recipientSessionId: CHILD, content: text('Before delivery') })).toEqual(
+    [],
+  )
   expect(
     message(CHILD, {
-      messageId: 'in3',
+      messageId: 'in1',
       senderSessionId: ROOT,
-      senderMessageId: 'out3',
+      senderMessageId: 'out1',
       recipientSessionId: CHILD,
-      content: text('Go on.'),
+      content: text('As received'),
     }),
-  ).toEqual([{ k: 'of', child: CHILD, norm: { k: 'told', t: 'Go on.' } }])
-  expect(message(ROOT, { messageId: 'out3', senderSessionId: ROOT, recipientSessionId: CHILD, content: text('Go on.') })).toEqual([])
-  // The person's own prompt, as an agent may report it to its session: already in the via agent's view.
-  expect(message(ROOT, { messageId: 'in2', recipientSessionId: ROOT, content: text('Do the thing.') })).toEqual([])
+  ).toEqual([])
+  // The parent's session moving on says nothing yet: the child's view waits.
+  expect(moved()).toEqual([])
+  expect(moved(CHILD)).toEqual([toldChild('As received')])
+  expect([...moved(), ...moved(CHILD)]).toEqual([])
+})
+
+test("a message's other view is never said again, however the two are linked and whichever came first", () => {
+  const { message, moved } = messages()
+  // Outgoing first and said; the incoming view unlinked, then a link-only update on the outgoing one.
+  message(ROOT, { messageId: 'out1', senderSessionId: ROOT, recipientSessionId: CHILD, content: text('Search acp.') })
+  expect(moved()).toEqual([toldChild('Search acp.')])
+  message(CHILD, { messageId: 'in1', recipientSessionId: CHILD, content: text('Search acp.') })
+  message(ROOT, { messageId: 'out1', recipientMessageId: 'in1' })
+  expect([...moved(), ...moved(CHILD)]).toEqual([])
+  // Incoming first and said, naming the outgoing view, which then comes unlinked.
+  message(CHILD, { messageId: 'in2', senderSessionId: ROOT, senderMessageId: 'out2', recipientSessionId: CHILD, content: text('Go on.') })
+  expect(moved(CHILD)).toEqual([toldChild('Go on.')])
+  message(ROOT, { messageId: 'out2', senderSessionId: ROOT, recipientSessionId: CHILD, content: text('Go on.') })
+  expect(moved()).toEqual([])
+})
+
+test("a message's later upserts and chunks are kept, as the RFD's patch rules say", () => {
+  const { message, chunk, moved } = messages()
+  // Empty, then its content.
+  message(ROOT, { messageId: 'out1', senderSessionId: ROOT, recipientSessionId: CHILD, content: [] })
+  message(ROOT, { messageId: 'out1', content: text('Reply with the word KESTREL.') })
+  expect(moved()).toEqual([toldChild('Reply with the word KESTREL.')])
+  // Its recipient named on a first, contentless upsert, and left out of the one with content.
+  message(ROOT, { messageId: 'out2', senderSessionId: ROOT, recipientSessionId: CHILD })
+  message(ROOT, { messageId: 'out2', content: text('Then OSPREY.') })
+  expect(moved()).toEqual([toldChild('Then OSPREY.')])
+  // Streamed into the child's view, its participants after the chunks.
+  chunk(CHILD, 'in3', 'Start by ')
+  chunk(CHILD, 'in3', 'reproducing it.')
+  message(CHILD, { messageId: 'in3', senderSessionId: ROOT, recipientSessionId: CHILD })
+  expect(moved(CHILD)).toEqual([toldChild('Start by reproducing it.')])
+})
+
+test("a message is said once its own session moves on, so another session's update between its chunks cuts nothing", () => {
+  const { message, chunk, moved } = messages()
+  message(CHILD, { messageId: 'in1', senderSessionId: ROOT, recipientSessionId: CHILD })
+  chunk(CHILD, 'in1', 'Start by ')
+  expect(moved(`${ROOT}:subagent:other`)).toEqual([])
+  chunk(CHILD, 'in1', 'reproducing it.')
+  expect(moved()).toEqual([])
+  expect(moved(CHILD)).toEqual([toldChild('Start by reproducing it.')])
+})
+
+test("a task reported only from its sender's side is said before the child's first work", () => {
+  const { message, moved } = messages()
+  message(ROOT, { messageId: 'out1', senderSessionId: ROOT, recipientSessionId: CHILD, content: text('Investigate X.') })
+  expect(moved(CHILD)).toEqual([toldChild('Investigate X.')])
+})
+
+test("a permission request or a steer between a message's chunks cuts nothing; only the prompt's end says what waits", () => {
+  const { message, chunk, moved } = messages()
+  const parse = (line: unknown) => moved.parse(line).filter((n) => n.k === 'told' || (n.k === 'of' && n.norm.k === 'told'))
+  message(CHILD, { messageId: 'in1', senderSessionId: ROOT, recipientSessionId: CHILD })
+  chunk(CHILD, 'in1', 'Start by ')
+  const ask = { relay: 'ask', id: 'p1', title: 'Run ls', kind: 'execute', options: [] }
+  expect(parse(ask)).toEqual([])
+  // A steer codex-acp takes mid-turn is no prompt's end either.
+  expect(parse({ relay: 'steered' })).toEqual([])
+  chunk(CHILD, 'in1', 'reproducing it.')
+  expect(parse({ relay: 'prompt_done', stopReason: 'end_turn' })).toEqual([toldChild('Start by reproducing it.')])
+})
+
+test('a message its sender has not yet addressed waits for its recipient, never said as one it received', () => {
+  const { message, moved } = messages()
+  message(ROOT, { messageId: 'out1', senderSessionId: ROOT, content: text('Investigate X.') })
+  expect(moved()).toEqual([])
+  message(ROOT, { messageId: 'out1', recipientSessionId: CHILD })
+  expect(moved()).toEqual([toldChild('Investigate X.')])
+})
+
+test("a message to the run's own session, from its subagent or another session, is said in the run's view", () => {
+  const { message, moved } = messages()
+  message(ROOT, { messageId: 'in1', senderSessionId: CHILD, recipientSessionId: ROOT, content: text('Found it.') })
+  expect(moved()).toEqual([{ k: 'told', t: 'Found it.' }])
 })
 
 const world = (): Children => ({ channels: new Map(), nested: new Map(), parents: new Map() })
@@ -314,6 +394,15 @@ test("a subagent's own subagent is spawned by its nested agent, not the run's", 
   expect(out.filter((c) => c.kind === 'spawn')).toEqual([
     { kind: 'spawn', child: 'a1/g#1', type: 'via:codex', title: 'inner', prompt: 'Search acp.' },
   ])
+})
+
+test("a subagent's new assignment keeps the model its session reported", () => {
+  const w = world()
+  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'One.' }))
+  route(w, 'a1', 'via:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))
+  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'Two.' }))
+  expect(w.channels.get('a1/c#2')?.model).toBe('gpt-6-luna')
 })
 
 test("a subagent's own subagent given new work after its parent's nested agent ended is shown from the run", () => {

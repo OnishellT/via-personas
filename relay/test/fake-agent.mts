@@ -9,7 +9,7 @@
 // command before it answers, then answers with the option the relay chose. FAKE_QUESTION (form or url) asks the person
 // one question before it answers, then answers with what came back; FAKE_QUESTION_URL is the link it asks to open;
 // FAKE_WITHDRAW withdraws the question ($/cancel_request) as soon as it is asked. FAKE_IMAGE answers with an image,
-// and a resumed session replays one.
+// and a resumed session replays one; FAKE_IMAGE=message sends one in a message to a subagent.
 import { appendFileSync } from 'node:fs'
 import { Readable, Writable } from 'node:stream'
 // The unstable schema, as codex-acp's: the stable one has no plan capability and drops it.
@@ -93,6 +93,19 @@ await acp
         release = resolve
       })
       return { stopReason: 'cancelled' }
+    }
+    if (process.env.FAKE_IMAGE === 'message') {
+      // A message to a subagent with an image, whole and as a chunk (ACP's subagents RFD).
+      const image = { type: 'image' as const, mimeType: 'image/png', data: PNG }
+      await ctx.client.notify(acp.methods.client.session.update, {
+        sessionId: 's1',
+        update: { sessionUpdate: 'session_message', messageId: 'm1', senderSessionId: 's1', recipientSessionId: 'c1', content: [image] },
+      })
+      await ctx.client.notify(acp.methods.client.session.update, {
+        sessionId: 'c1',
+        update: { sessionUpdate: 'session_message_chunk', messageId: 'm2', content: image },
+      })
+      return { stopReason: 'end_turn' }
     }
     if (process.env.FAKE_IMAGE === '1') {
       await ctx.client.notify(acp.methods.client.session.update, {

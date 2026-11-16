@@ -59,6 +59,7 @@ export function route(w: Children, agentId: string, type: string, event: Extract
       type,
       title: channel?.title ?? 'subagent',
       ...(channel?.role ? { role: channel.role } : {}),
+      ...(channel?.model ? { model: channel.model } : {}),
       queue: [],
       spawned: false,
       ended: false,
