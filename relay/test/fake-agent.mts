@@ -4,7 +4,8 @@
 // hands them to an agent, and the prompt's block types; FAKE_STOP is the stop reason it ends with.
 // FAKE_CLOSE advertises session/close; FAKE_HANG holds the prompt until a cancel, or with `stubborn` past
 // it; FAKE_LOG names a file each cancel and close is written to. FAKE_OPTIONS offers config options, as
-// codex-acp does: a model and its reasoning efforts; each set one is logged.
+// codex-acp does: a model and its reasoning efforts; each set one is logged. FAKE_REFUSE refuses every config
+// option and mode, with its reason in the error's data, as testy and codex-acp do.
 import { appendFileSync } from 'node:fs'
 import { Readable, Writable } from 'node:stream'
 // The unstable schema, as codex-acp's: the stable one has no plan capability and drops it.
@@ -44,10 +45,13 @@ await acp
     process.env.FAKE_OPTIONS === '1' ? { sessionId: 's1', configOptions: OPTIONS } : { sessionId: 's1' },
   )
   .onRequest(acp.methods.agent.session.setMode, (ctx) => {
+    if (process.env.FAKE_REFUSE === '1') throw acp.RequestError.invalidParams(`no mode ${ctx.params.modeId} here; try workspace-write`)
     log(`mode ${ctx.params.modeId}`)
     return {}
   })
   .onRequest(acp.methods.agent.session.setConfigOption, (ctx) => {
+    if (process.env.FAKE_REFUSE === '1')
+      throw acp.RequestError.invalidParams(`no ${ctx.params.configId} ${ctx.params.value} here; try gpt-6-luna`)
     log(`set ${ctx.params.configId}=${ctx.params.value}`)
     return { configOptions: OPTIONS }
   })

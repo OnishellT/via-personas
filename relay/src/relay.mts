@@ -244,14 +244,14 @@ const result = await acp
     if (modeId)
       await ctx
         .request(acp.methods.agent.session.setMode, { sessionId, modeId })
-        .catch((error: unknown) => fail(`the agent refused mode ${modeId}: ${String((error as { message?: unknown })?.message ?? error)}`))
+        .catch((error: unknown) => fail(`the agent refused mode ${modeId}: ${reason(error)}`))
     let configOptions = (opened as { configOptions?: acp.SessionConfigOption[] | null }).configOptions ?? []
     const model = process.env.RELAY_MODEL
     if (model) {
       // A model the agent refuses ends the run: carrying on would answer from its default model.
       const set = await ctx
         .request(acp.methods.agent.session.setConfigOption, { sessionId, configId: 'model', value: model })
-        .catch((error: unknown) => fail(`the agent refused model ${model}: ${String((error as { message?: unknown })?.message ?? error)}`))
+        .catch((error: unknown) => fail(`the agent refused model ${model}: ${reason(error)}`))
       configOptions = set.configOptions ?? configOptions
     }
     let extra: Record<string, unknown> = {}
@@ -274,9 +274,7 @@ const result = await acp
       }
       const set = await ctx
         .request(acp.methods.agent.session.setConfigOption, { sessionId, configId, value: value as string })
-        .catch((error: unknown) =>
-          fail(`the agent refused ${configId} ${String(value)}: ${String((error as { message?: unknown })?.message ?? error)}`),
-        )
+        .catch((error: unknown) => fail(`the agent refused ${configId} ${String(value)}: ${reason(error)}`))
       configOptions = set.configOptions ?? configOptions
     }
     // The person's options (RELAY_OPTIONS) are only those that tune the model: ACP's model_config and speed
@@ -312,7 +310,7 @@ const result = await acp
     if (modeId && Object.keys(options).length > 0)
       await ctx
         .request(acp.methods.agent.session.setMode, { sessionId, modeId })
-        .catch((error: unknown) => fail(`the agent refused mode ${modeId}: ${String((error as { message?: unknown })?.message ?? error)}`))
+        .catch((error: unknown) => fail(`the agent refused mode ${modeId}: ${reason(error)}`))
     const current = configOptions.find((o) => o.id === 'model')
     if (current && 'currentValue' in current && typeof current.currentValue === 'string')
       out({ relay: 'model', name: current.currentValue })

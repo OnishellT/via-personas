@@ -152,3 +152,23 @@ test("a person's config line sets only options that tune the model: never a mode
       set: [],
     })
 })
+
+test("a refused model, mode or config option keeps the agent's reason, not only 'Invalid params'", async () => {
+  const refused = async (env: Record<string, string>) => {
+    const run = await configured({ FAKE_REFUSE: '1', ...env })
+    assert.equal(run.status, 1)
+    return run.error
+  }
+  assert.equal(
+    await refused({ RELAY_MODEL: 'gpt-6.1-sol' }),
+    'the agent refused model gpt-6.1-sol: Invalid params: no model gpt-6.1-sol here; try gpt-6-luna',
+  )
+  assert.equal(
+    await refused({ RELAY_AGENT_MODE: 'read-only' }),
+    'the agent refused mode read-only: Invalid params: no mode read-only here; try workspace-write',
+  )
+  assert.equal(
+    await refused({ RELAY_CONFIG: JSON.stringify({ reasoning_effort: 'high' }) }),
+    'the agent refused reasoning_effort high: Invalid params: no reasoning_effort high here; try gpt-6-luna',
+  )
+})

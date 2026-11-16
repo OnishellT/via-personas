@@ -10422,11 +10422,11 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
     };
   const modeId = process.env.RELAY_AGENT_MODE;
   if (modeId)
-    await ctx.request(methods.agent.session.setMode, { sessionId, modeId }).catch((error2) => fail(`the agent refused mode ${modeId}: ${String(error2?.message ?? error2)}`));
+    await ctx.request(methods.agent.session.setMode, { sessionId, modeId }).catch((error2) => fail(`the agent refused mode ${modeId}: ${reason(error2)}`));
   let configOptions = opened.configOptions ?? [];
   const model = process.env.RELAY_MODEL;
   if (model) {
-    const set = await ctx.request(methods.agent.session.setConfigOption, { sessionId, configId: "model", value: model }).catch((error2) => fail(`the agent refused model ${model}: ${String(error2?.message ?? error2)}`));
+    const set = await ctx.request(methods.agent.session.setConfigOption, { sessionId, configId: "model", value: model }).catch((error2) => fail(`the agent refused model ${model}: ${reason(error2)}`));
     configOptions = set.configOptions ?? configOptions;
   }
   let extra = {};
@@ -10445,9 +10445,7 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
       const values = option.options.flatMap((o) => "options" in o ? o.options : [o]).map((o) => o.value);
       if (!values.includes(value)) fail(`the agent offers ${configId} ${values.join(", ")}${forModel}, not ${String(value)}`);
     }
-    const set = await ctx.request(methods.agent.session.setConfigOption, { sessionId, configId, value }).catch(
-      (error2) => fail(`the agent refused ${configId} ${String(value)}: ${String(error2?.message ?? error2)}`)
-    );
+    const set = await ctx.request(methods.agent.session.setConfigOption, { sessionId, configId, value }).catch((error2) => fail(`the agent refused ${configId} ${String(value)}: ${reason(error2)}`));
     configOptions = set.configOptions ?? configOptions;
   };
   const TUNING = ["model_config", "speed"];
@@ -10474,7 +10472,7 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
   }
   for (const [configId, value] of Object.entries(extra)) await setOption(configId, value);
   if (modeId && Object.keys(options).length > 0)
-    await ctx.request(methods.agent.session.setMode, { sessionId, modeId }).catch((error2) => fail(`the agent refused mode ${modeId}: ${String(error2?.message ?? error2)}`));
+    await ctx.request(methods.agent.session.setMode, { sessionId, modeId }).catch((error2) => fail(`the agent refused mode ${modeId}: ${reason(error2)}`));
   const current = configOptions.find((o) => o.id === "model");
   if (current && "currentValue" in current && typeof current.currentValue === "string")
     out({ relay: "model", name: current.currentValue });
