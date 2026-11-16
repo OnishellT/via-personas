@@ -202,11 +202,11 @@ test("via's mode is set again after a person's options, so one named some other 
   ])
 })
 
-test("a person's config line never sets a mode, model or thinking option: a mode would undo read-only", () => {
-  for (const id of ['mode', 'model', 'reasoning_effort'])
-    assert.deepEqual(personal({ [id]: id === 'mode' ? 'agent-full-access' : 'x' }), {
+test("a person's config line sets only options that tune the model: never a mode, model or thinking one", () => {
+  for (const id of ['mode', 'model', 'reasoning_effort', 'sandbox'])
+    assert.deepEqual(personal({ [id]: id === 'mode' ? 'agent-full-access' : 'off' }), {
       status: 1,
-      error: `${id} is set by its own line (model, thinking, tools or plan mode), not a config line`,
+      error: `${id} is not an option a config line sets: only ones that tune the model, such as fast-mode. config: ${id}= drops it.`,
       set: [],
     })
 })

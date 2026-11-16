@@ -475,14 +475,14 @@ test('a thinking line becomes the reasoning_effort config option, whatever its l
 test("a config line goes to the relay as the person's option, and holds for follow-ups until a new line replaces it", async ($, on) => {
   const spawns: Spawn[] = []
   arrange(on, spawns)
-  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'config: fast-mode=on\nconfig: collaboration_mode=plan\ngo' })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'config: fast-mode=on\nconfig: speed=fast\ngo' })
   await runTurn($)
-  expect(JSON.parse(spawns[0]?.env?.RELAY_OPTIONS ?? '{}')).toEqual({ 'fast-mode': 'on', collaboration_mode: 'plan' })
+  expect(JSON.parse(spawns[0]?.env?.RELAY_OPTIONS ?? '{}')).toEqual({ 'fast-mode': 'on', speed: 'fast' })
   await $.turn.start({ turnId: 't2', agentId: 'a1', text: 'config: fast-mode=off\nand again' })
   await runTurn($, { ...STEP, turnId: 't2', messageCount: 2 })
-  expect(JSON.parse(spawns[1]?.env?.RELAY_OPTIONS ?? '{}')).toEqual({ 'fast-mode': 'off', collaboration_mode: 'plan' })
+  expect(JSON.parse(spawns[1]?.env?.RELAY_OPTIONS ?? '{}')).toEqual({ 'fast-mode': 'off', speed: 'fast' })
   // An empty value drops the option; none left sends none.
-  await $.turn.start({ turnId: 't3', agentId: 'a1', text: 'config: fast-mode=\nconfig: collaboration_mode=\nonce more' })
+  await $.turn.start({ turnId: 't3', agentId: 'a1', text: 'config: fast-mode=\nconfig: speed=\nonce more' })
   await runTurn($, { ...STEP, turnId: 't3', messageCount: 3 })
   expect(spawns[2]?.env?.RELAY_OPTIONS).toBeUndefined()
 })

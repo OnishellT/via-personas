@@ -27,6 +27,8 @@ const OPTIONS = [
   select('reasoning_effort', 'thought_level', 'medium', ['low', 'medium', 'high', 'xhigh']),
   select('mode', 'mode', 'read-only', ['read-only', 'agent-full-access']),
   select('fast-mode', 'model_config', 'off', ['off', 'on']),
+  // As a harness might name a looser sandbox: no category via knows.
+  select('sandbox', 'other', 'on', ['on', 'off']),
 ]
 let release
 await acp

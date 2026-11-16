@@ -10450,7 +10450,8 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
     );
     configOptions = set.configOptions ?? configOptions;
   };
-  const reserved = (o) => ["mode", "model", "thought_level"].includes(String(o.category)) || o.id === "mode" || o.id === "model";
+  const TUNING = ["model_config", "speed"];
+  const reserved = (o) => !TUNING.includes(String(o.category)) || o.id === "mode" || o.id === "model";
   let options = {};
   try {
     options = JSON.parse(process.env.RELAY_OPTIONS || "{}");
@@ -10460,7 +10461,10 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
   const settable = () => configOptions.filter((o) => !reserved(o)).map((o) => o.id);
   for (const [configId, value] of Object.entries(options)) {
     const option = configOptions.find((o) => o.id === configId);
-    if (option && reserved(option)) fail(`${configId} is set by its own line (model, thinking, tools or plan mode), not a config line`);
+    if (option && reserved(option))
+      fail(
+        `${configId} is not an option a config line sets: only ones that tune the model, such as ${settable().join(", ") || "none here"}. config: ${configId}= drops it.`
+      );
     if (option === void 0) {
       const title = `the agent offers no ${configId} option${forModel}, so this run goes without it; it offers ${settable().join(", ") || "none"}. config: ${configId}= drops it.`;
       out({ sessionId, update: { sessionUpdate: "notice", severity: "warning", title } });

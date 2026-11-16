@@ -116,7 +116,7 @@ export function helpOf(adapter: HelpAdapter, models: readonly string[]): string 
   else lines.push(`thinking:           refused: ${name} takes no thinking level.`)
   if (adapter.options)
     lines.push(
-      `config: <id>=<v>    one of ${name}'s own session options, such as fast-mode=on; one per line. An option the model does not offer is skipped with a warning naming those it does; <id>= drops a held one; a read-only run takes none; mode, model and thinking are set by their own lines.`,
+      `config: <id>=<v>    one of ${name}'s own options that tune its model, such as fast-mode=on; one per line. Any other, such as a mode, is refused; one the model does not offer is skipped with a warning naming those it does; <id>= drops a held one; a read-only run takes none.`,
     )
   lines.push(
     adapter.defaultModel

@@ -225,9 +225,9 @@ async function* begin(
     JSON.stringify(merged.config) !== JSON.stringify(held?.config)
   // What the person allows Claude itself, as the spawn carried it: plan mode is read-only here too.
   const mode = record.mode as Mode
-  // A harness may name an option that loosens its sandbox anything it likes, so a read-only run takes none:
-  // the relay's refusal of mode options is a list, and a list misses what it doesn't name. Refused before the
-  // record keeps them, or every later message would be refused too.
+  // A read-only run takes none: the relay allows only model-tuning options, but a harness may file one that
+  // loosens its sandbox under one of those categories too. Refused before the record keeps them, or every
+  // later message would be refused as well.
   if (merged.config && (mode === 'plan' || merged.tools === 'read' || record.rebuilt)) {
     const refused = `A read-only ${adapter.name} run takes no config lines: an option could loosen what read-only enforces. Start a new agent without \`tools: read\`, outside plan mode, to use them.`
     return yield* respond(e, textChunks(refused), refused)

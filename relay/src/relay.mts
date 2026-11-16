@@ -279,10 +279,11 @@ const result = await acp
         )
       configOptions = set.configOptions ?? configOptions
     }
-    // The person's options (RELAY_OPTIONS) never set what via's own lines do: a mode would undo read-only
-    // (codex offers read-only to agent-full-access as one), and the model and thinking have lines of their own.
-    const reserved = (o: acp.SessionConfigOption) =>
-      ['mode', 'model', 'thought_level'].includes(String(o.category)) || o.id === 'mode' || o.id === 'model'
+    // The person's options (RELAY_OPTIONS) are only those that tune the model: ACP's model_config and speed
+    // categories, such as codex's fast-mode. Anything else may touch the sandbox or approvals under any name
+    // (codex offers read-only to agent-full-access as a mode option), so it is refused, an uncategorised one too.
+    const TUNING = ['model_config', 'speed']
+    const reserved = (o: acp.SessionConfigOption) => !TUNING.includes(String(o.category)) || o.id === 'mode' || o.id === 'model'
     let options: Record<string, unknown> = {}
     try {
       options = JSON.parse(process.env.RELAY_OPTIONS || '{}') as Record<string, unknown>
@@ -292,7 +293,10 @@ const result = await acp
     const settable = () => configOptions.filter((o) => !reserved(o)).map((o) => o.id)
     for (const [configId, value] of Object.entries(options)) {
       const option = configOptions.find((o) => o.id === configId)
-      if (option && reserved(option)) fail(`${configId} is set by its own line (model, thinking, tools or plan mode), not a config line`)
+      if (option && reserved(option))
+        fail(
+          `${configId} is not an option a config line sets: only ones that tune the model, such as ${settable().join(', ') || 'none here'}. config: ${configId}= drops it.`,
+        )
       // Not a failure: an option held from an earlier message may be one this model lacks, such as Codex's
       // fast-mode on a model with no fast tier, and every later message would fail on it.
       if (option === undefined) {
