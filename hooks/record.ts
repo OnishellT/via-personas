@@ -9,7 +9,7 @@ export type AgentRecord = {
   nested?: true // a harness's own subagent: only its parent's run can answer it
   handback: boolean // spawned locally in auto mode: its answer goes back as a SubagentHandback
   mode: string // Claude Code's permission mode at the spawn
-  description?: string // the spawn's Agent description, for its panel row
+  description?: string // the spawn's Agent description
   choice?: Choice // the model, tools and thinking its prompts asked for
   session?: string // the harness's session, which its next turn resumes
   report?: string // its last answer

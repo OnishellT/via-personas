@@ -1,7 +1,7 @@
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 
 import type { AgentRecord } from '../../hooks/record'
-import { agentStore, run, STEP } from '../helpers'
+import { agentStore, run, runTurn, STEP } from '../helpers'
 
 type TestOn = Parameters<TestBody>[1]
 type Spawn = { argv: string[]; input: string | undefined }
@@ -38,6 +38,21 @@ const TWO = `${[
   '{"event":"step_update","step_update":{"step_index":3,"state":"ACTIVE","step_type":"agent_response","text_delta":"zebra-41"}}',
   '{"event":"step_update","step_update":{"step_index":3,"state":"DONE","step_type":"agent_response","text_delta":"\\n","usage":{"input_tokens":9381,"output_tokens":70,"thinking_tokens":66,"cache_read_tokens":0,"total_tokens":9451}}}',
   '{"event":"result","result":{"status":"SUCCESS","num_turns":1,"usage":{"input_tokens":17249,"output_tokens":1494,"thinking_tokens":1401,"cache_read_tokens":0,"total_tokens":18743}}}',
+].join('\n')}\n`
+// Captured from agy 1.5.9 (2026-11-15), compacted as above, its folder written /w: a command that
+// failed, a write agy refused (ERROR), the same write again, then the answer.
+const STEPS = `${[
+  '{"event":"init","conversation_id":"b068a9b2-ad75-4c21-9832-079969099631","init":{"cwd":"/w"}}',
+  '{"event":"step_update","step_update":{"step_index":0,"state":"DONE","step_type":"user_input"}}',
+  '{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"ls missing-file"}}}}',
+  '{"event":"step_update","step_update":{"step_index":2,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"ls missing-file"},"output":"Created At: 2026-11-15T22:40:53-05:00\\nCompleted At: 2026-11-15T22:40:55-05:00\\nCommand exited with code 1.\\n\\nCommand output:\\nls: missing-file: No such file or directory\\r\\n"}}}',
+  '{"event":"step_update","step_update":{"step_index":4,"state":"ACTIVE","step_type":"tool","tool_name":"write_file","tool_info":{"name":"write_file","parameters":{"Path":"/w/note.txt"}}}}',
+  '{"event":"step_update","step_update":{"step_index":4,"state":"ERROR","step_type":"tool","tool_name":"write_file","tool_info":{"name":"write_file","parameters":{"Path":"/w/note.txt"},"error":{"type":"TOOL_ERROR","message":"/w/note.txt already exists. To overwrite it, retry with Overwrite=true."}}}}',
+  '{"event":"step_update","step_update":{"step_index":6,"state":"ACTIVE","step_type":"tool","tool_name":"write_file","tool_info":{"name":"write_file","parameters":{"Path":"/w/note.txt"}}}}',
+  '{"event":"step_update","step_update":{"step_index":6,"state":"DONE","step_type":"tool","tool_name":"write_file","tool_info":{"name":"write_file","parameters":{"Path":"/w/note.txt"}}}}',
+  '{"event":"step_update","step_update":{"step_index":7,"state":"ACTIVE","step_type":"agent_response","text_delta":"DONE"}}',
+  '{"event":"step_update","step_update":{"step_index":7,"state":"DONE","step_type":"agent_response","text_delta":"\\n","usage":{"input_tokens":2207,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":8027,"total_tokens":2208}}}',
+  '{"event":"result","result":{"status":"SUCCESS","usage":{"input_tokens":16346,"output_tokens":229,"thinking_tokens":0,"cache_read_tokens":23494,"total_tokens":16575}}}',
 ].join('\n')}\n`
 // A follow-up resumed with --conversation: the same id comes back.
 const RESUMED = `${[
@@ -150,12 +165,14 @@ test('a thinking level agy lacks is refused', async ($, on) => {
   expect(result.answer).toContain('thinking must be one of low, medium, high, xhigh, max')
 })
 
-test('a tool step shows once, only the last message is the answer, and usage keeps cached reads apart', async ($, on) => {
+test('a tool step is one call to the step tool, only the last message is the answer, and usage keeps cached reads apart', async ($, on) => {
   const spawns: Spawn[] = []
   arrange(on, spawns, { stdout: TOOLS })
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'what is in seed?' })
-  const { chunks, result } = await run($)
-  expect(chunks.filter((c) => c.kind === 'text' && c.text.includes('▸ read_file')).length).toBe(1)
+  const { chunks, result } = await runTurn($)
+  const calls = chunks.filter((c) => c.kind === 'input').map((c) => (c.kind === 'input' ? JSON.parse(c.json) : undefined))
+  expect(calls).toEqual([{ kind: 'read', title: 'Read /w/seed', path: '/w/seed' }])
+  expect(chunks.some((c) => c.kind === 'text' && c.text.includes('read_file'))).toBe(false)
   expect(result.answer).toBe('seed\n\n— answered by agy, gemini-3.8-flash-high')
   // The last step, not both steps summed.
   expect(result.usage).toEqual({
@@ -165,6 +182,25 @@ test('a tool step shows once, only the last message is the answer, and usage kee
     cache_read_input_tokens: 17582,
     cache_creation_input_tokens: 0,
   })
+})
+
+test("agy's commands, edits and refusals are calls that end as agy reported: output, exit code, its reason", async ($, on) => {
+  arrange(on, [], { stdout: STEPS })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const { chunks, result, calls } = await runTurn($)
+  const starts = chunks.flatMap((c) => (c.kind === 'input' ? [JSON.parse(c.json)] : []))
+  expect(starts).toEqual([
+    { kind: 'execute', title: 'ls missing-file' },
+    { kind: 'edit', title: 'Write note.txt', path: '/w/note.txt' },
+    { kind: 'edit', title: 'Write note.txt', path: '/w/note.txt' },
+  ])
+  // What Claude reads back from each call.
+  expect(calls).toEqual([
+    { result: 'ls: missing-file: No such file or directory\nexit code 1', isError: true },
+    { result: '/w/note.txt already exists. To overwrite it, retry with Overwrite=true.', isError: true },
+    { result: 'Done; no output reported.' },
+  ])
+  expect(result.answer).toBe('DONE\n\n— answered by agy, gemini-3.8-flash-high')
 })
 
 test('the conversation id is saved, and a follow-up resumes it with --conversation', async ($, on) => {
@@ -215,7 +251,7 @@ test('text before a tool and text after it are two messages: only the last is th
   const spawns: Spawn[] = []
   arrange(on, spawns, { stdout: TWO })
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'check seed2' })
-  const { chunks, result } = await run($)
+  const { chunks, result } = await runTurn($)
   expect(chunks.some((c) => c.kind === 'text' && c.text.includes('Checking the file now'))).toBe(true)
   expect(result.answer).toBe('zebra-41\n\n— answered by agy, gemini-3.8-flash-high')
 })
@@ -267,7 +303,7 @@ test("usage is the last step's, not agy's own result total", async ($, on) => {
   const total = JSON.parse(TWO.trim().split('\n').at(-1) ?? '{}').result.usage
   arrange(on, [], { stdout: TWO })
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'check seed2' })
-  const { result } = await run($)
+  const { result } = await runTurn($)
   expect(result.usage).toEqual({
     model: 'gemini-3.8-flash-high',
     input_tokens: 9381,

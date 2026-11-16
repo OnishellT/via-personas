@@ -24,7 +24,7 @@
   "overrides": [
     {
       // These strip control, bidirectional and zero-width characters, so their patterns name them.
-      "includes": ["hooks/acp/text.ts", "hooks/progress.ts", "hooks/run.ts", "tests/progress.test.ts"],
+      "includes": ["hooks/acp/text.ts", "hooks/run.ts", "tests/progress.test.ts"],
       "linter": { "rules": { "suspicious": { "noControlCharactersInRegex": "off", "noMisleadingCharacterClass": "off" } } }
     },
     {

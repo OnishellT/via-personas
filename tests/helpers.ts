@@ -157,7 +157,6 @@ export function testWorld(given: Partial<World> = {}): World {
     installs: new Map(),
     others: new Set(),
     inboxes: new Map(),
-    activity: new Map(),
     channels: new Map(),
     nested: new Map(),
     spawns: new Map(),

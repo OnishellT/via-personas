@@ -4,7 +4,6 @@ import type { Norm } from './acp/norm'
 import type { Mark } from './acp/steps'
 import type { Adapter, Ask, Mode } from './adapter'
 import { closeChildren, route } from './children'
-import { stepOf } from './progress'
 import { nearestModels } from './prompt'
 import { finish, type Totals } from './report'
 import type { Inbox } from './steer'
@@ -48,7 +47,6 @@ type RunState = {
   readonly notices: string[]
   error: string // the run's failure as said, cleared by a later model call
   steered: number
-  touched: boolean // a tool line moved the panel row on
   readonly compacting: Set<string>
   compacted: boolean // a /compact prompt that compacted and said nothing has the compaction as its answer
   readonly asks: Ask[]
@@ -133,12 +131,9 @@ function take(s: RunState, c: Context, event: Norm): (TurnStepChunk | Mark)[] {
       if (marks.length > 0) s.writer.boundary()
       return marks
     }
-    case 'tool': {
-      const tools = (c.w.activity.get(c.agentId)?.tools ?? 0) + 1
-      c.w.activity.set(c.agentId, { step: stepOf(event.t), tools })
-      s.touched = true
+    // A tool call the harness gave no id: a line of text, as it cannot be matched to its end.
+    case 'tool':
       return [s.writer.say(event.t)]
-    }
     default: {
       const unreachable: never = event
       return unreachable
@@ -152,13 +147,6 @@ export async function* run(
   $: Pick<EngineInterface, 'process' | 'clock' | 'plugin' | 'fs' | 'env' | 'ui'>,
   { agentId, choice, prompt, signal, inbox, session, block = 0, guard, mode, installed, models = [], probe, save }: RunInput,
 ): AsyncGenerator<TurnStepChunk | Mark, RunResult> {
-  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  const row = async (text: string) => {
-    if (!home) return
-    await $.fs.write(`${home}/.claude/via/rows/${agentId}.jsonl`, text).catch(() => {})
-  }
-  const description = stepOf(w.records.get(agentId)?.description ?? '')
-  const named = description ? `${description} · ` : ''
   const request = adapter.start({ choice, prompt, session, agentId, root: $.plugin.root, inbox: inbox?.path, guard, mode, installed })
   const s: RunState = {
     writer: new StepWriter(block),
@@ -167,7 +155,6 @@ export async function* run(
     notices: [],
     error: '',
     steered: 0,
-    touched: false,
     compacting: new Set(),
     compacted: false,
     asks: [],
@@ -180,7 +167,6 @@ export async function* run(
   let buffer = ''
   let stderr = ''
   let failure = ''
-  await row('')
   const child = $.process.spawn(request)
   const pieces = child[Symbol.asyncIterator]()
   let timer: Timer | undefined
@@ -216,14 +202,6 @@ export async function* run(
       for (const line of lines) yield* takeLine(line)
       // Asked without waiting: Esc, the time limit and an interrupt still reach the harness meanwhile.
       while (s.asks.length > 0) void answerAsk($, w.inboxes, agentId, inbox, s.asks.shift() as Ask, adapter.name)
-      if (s.touched) {
-        s.touched = false
-        const activity = w.activity.get(agentId)
-        if (activity !== undefined) {
-          const content = `via:${adapter.name} · ${named}▸ ${activity.step} · ${activity.tools} ${activity.tools === 1 ? 'step' : 'steps'}`
-          await row(`${JSON.stringify({ id: agentId, content })}\n`)
-        }
-      }
       if (s.issued !== undefined) {
         await save(s.issued)
         s.issued = undefined
@@ -273,10 +251,8 @@ export async function* run(
     // awaited, so a child slow to go cannot hold up the rest.
     if (!exited) void Promise.resolve(pieces.return?.(undefined as never)).catch(() => {})
     timer?.cancel()
-    w.activity.delete(agentId)
     // Its subagents ran in the harness: nothing more can come from them.
     closeChildren(w, agentId, stopped === undefined ? undefined : 'the harness run was stopped')
-    await row('')
     if (inbox) await closeInbox($, inbox, agentId, w.inboxes)
   }
   yield* closeOpen(

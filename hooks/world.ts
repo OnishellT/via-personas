@@ -2,7 +2,6 @@ import type { Steps } from './acp/steps'
 import type { Adapter } from './adapter'
 import type { Children } from './children'
 import type { Installs } from './install'
-import type { Activity } from './progress'
 import type { Records } from './record'
 import type { Inbox } from './steer'
 
@@ -23,5 +22,4 @@ export type World = Steps &
     seeds: Map<string, string> // a spawn's prompt, until its first turn starts
     others: Set<string> // agents that are not via's
     inboxes: Map<string, Inbox>
-    activity: Map<string, Activity>
   }
