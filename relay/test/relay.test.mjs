@@ -63,6 +63,7 @@ test('the relay offers streamed command output, no terminal of its own, and no p
   assert.equal(offered.plan, undefined)
   assert.equal(offered._meta.terminal_output_delta, true)
   assert.equal(offered.terminal, false)
+  assert.deepEqual(offered.session.notices, {})
 })
 
 test('an image under the working folder goes along to an agent that takes images; a missing, fake or outside one stays text', () => {

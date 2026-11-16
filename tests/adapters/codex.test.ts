@@ -215,6 +215,41 @@ test('only the last message is the answer, signed with the model the session run
   expect(chunks.some((c) => c.kind === 'text' && c.text.includes('▸ interrupted'))).toBe(true)
 })
 
+// codex-acp 2.6.0 sends its warnings as notices once the client takes them (src/SessionNotice.ts).
+const NOTICE = {
+  sessionId: SID,
+  update: {
+    sessionUpdate: 'notice',
+    severity: 'warning',
+    title: 'This session was recorded with model `gpt-6-luna` but is resuming with `gpt-6.1-sol`.',
+  },
+}
+test('a warning codex sends as a notice follows the answer, apart from it, never inside it', async ($, on) => {
+  const spawns: Spawn[] = []
+  const withNotice = CAPTURED.flatMap((e) => (e === CAPTURED[CAPTURED.length - 6] ? [NOTICE, e] : [e]))
+  arrange(on, spawns, { stdout: lines(withNotice) })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const { result } = await runTurn($)
+  expect(result.answer).toBe(
+    'REDIRECTED\n\nWarning: This session was recorded with model `gpt-6-luna` but is resuming with `gpt-6.1-sol`.\n\n— answered by codex, gpt-6.1-sol',
+  )
+})
+
+test('a notice survives a failed run, said before why it failed', async ($, on) => {
+  const spawns: Spawn[] = []
+  const failed = [
+    { relay: 'session', sessionId: SID },
+    { relay: 'steered' },
+    { sessionId: SID, update: { sessionUpdate: 'notice', severity: 'error', title: 'Model unavailable' } },
+    { relay: 'error', message: 'Internal error: the model is overloaded' },
+  ]
+  arrange(on, spawns, { stdout: lines(failed), code: 1 })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const { result } = await runTurn($)
+  expect(result.answer.startsWith('Error: Model unavailable\n\n')).toBe(true)
+  expect(result.answer).toContain('overloaded')
+})
+
 // No model refuses on demand: the captured run's last prompt is given each stop reason in turn.
 const stoppedWith = (stopReason: string) => CAPTURED.map((e, i) => (i >= CAPTURED.length - 2 ? { ...e, stopReason } : e))
 

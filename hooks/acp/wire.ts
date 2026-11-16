@@ -12,6 +12,7 @@ export type Read = {
   usage_update: 'used'
   subagent_update: 'sessionId' | 'title' | 'description' | 'state'
   config_option_update: 'configOptions'
+  notice: 'severity' | 'title' | 'description'
 }
 
 export type SessionUpdate = {

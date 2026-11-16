@@ -114,7 +114,8 @@ const attached = (text: string): acp.ContentBlock[] => {
 const CAPABILITIES: acp.ClientCapabilities = {
   fs: { readTextFile: false, writeTextFile: false },
   terminal: false,
-  session: { compaction: {} },
+  // notices: codex-acp then sends its warnings as notices, not as text in the answer.
+  session: { compaction: {}, notices: {} },
   subagents: {},
   _meta: { terminal_output_delta: true },
 }

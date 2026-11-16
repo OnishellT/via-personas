@@ -33,17 +33,19 @@ export function finish(args: {
     report = partial ? `${partial}\n\n${notice}` : notice
     say(partial ? `\n\n${notice}` : notice)
   }
+  // Before a failure, not dropped by it: a warning, such as a model reroute, may be why it failed.
+  if (args.notices.length > 0) {
+    const partial = report.trim()
+    const said = args.notices.join('\n')
+    report = partial ? `${partial}\n\n${said}` : said
+    say(partial ? `\n\n${said}` : said)
+  }
   // A failure keeps what the harness said before it, as a failed nested child does: a reply cut off at a
   // limit is still the reply so far.
   if (args.failure) {
     const partial = report.trim()
     report = partial ? `${partial}\n\n${args.failure}` : args.failure
     say(partial ? `\n\n${args.failure}` : `\n${args.failure}`)
-  }
-  if (args.notices.length > 0 && !args.failure) {
-    const said = args.notices.join('\n')
-    report = `${report.trim()}\n\n${said}`
-    say(`\n\n${said}`)
   }
   const undelivered = undeliveredNotice(args.inbox, args.steered, name)
   if (undelivered) {

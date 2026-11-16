@@ -1,5 +1,6 @@
 import { isRecord } from './json'
 import type { Ask, Norm } from './norm'
+import { unhidden } from './text'
 import type { SessionUpdate } from './wire'
 
 // An ACP agent runs behind relay/relay.mjs, which holds the connection open: the engine writes a
@@ -183,6 +184,16 @@ function sessionEvents(cwdOf: () => string) {
         }
         return out
       }
+      // Said after the answer, apart from it: a warning about the run, such as Codex resuming on another model.
+      case 'notice': {
+        const title = typeof u.title === 'string' ? unhidden(u.title).trim() : ''
+        if (!title) return []
+        const description = typeof u.description === 'string' ? unhidden(u.description).trim() : ''
+        // codex-acp's titles end without a full stop: "Model rerouted", then what happened.
+        const detail = description ? `${/[.!?:]$/.test(title) ? '' : '.'} ${description}` : ''
+        const label = u.severity === 'warning' ? 'Warning: ' : u.severity === 'error' ? 'Error: ' : ''
+        return [{ k: 'notice', t: `${label}${title}${detail}` }]
+      }
       case 'plan': {
         const entries = (Array.isArray(u.entries) ? u.entries.filter((entry) => isRecord(entry)) : []).flatMap((entry) =>
           typeof entry.content === 'string'
@@ -236,7 +247,7 @@ function sessionEvents(cwdOf: () => string) {
 }
 
 // What a subagent's session says that its nested agent shows; its usage is its own context, not the run's.
-const SHOWN: ReadonlySet<string> = new Set(['message', 'text', 'thinking', 'plan', 'call', 'called'])
+const SHOWN: ReadonlySet<string> = new Set(['message', 'text', 'thinking', 'plan', 'call', 'called', 'notice'])
 
 // A parser per run. Updates before the first prompt are a resumed session's history, replayed by
 // session/load: never part of this answer.

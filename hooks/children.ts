@@ -169,6 +169,7 @@ export async function* childRun(
   const writer = new StepWriter()
   let failure: string | undefined
   let cancelled = false
+  const notices: string[] = []
   for (;;) {
     const item = channel?.queue.shift() ?? (channel === undefined ? ({ k: 'end' } as const) : undefined)
     if (item === undefined) {
@@ -213,6 +214,7 @@ export async function* childRun(
     else if (item.k === 'call')
       yield writer.call(item.id, { kind: item.kind, title: item.title, ...(item.path ? { path: item.path } : {}) }, null)
     else if (item.k === 'called') yield { kind: 'call-end', id: item.id, output: item.output, failed: item.failed }
+    else if (item.k === 'notice') notices.push(item.t)
   }
   // A failed or cancelled child keeps what it said, then why in place of the signature: a signature says it
   // answered. A cancel is most often its parent's own interrupt, so it reads as cancelled, not failed.
@@ -223,8 +225,10 @@ export async function* childRun(
       : answeredBy(`${name} subagent`, channel?.model)
   const report = writer.report.trim()
   const said = report || (failure || cancelled ? '' : `The ${name} subagent ended without a message.`)
-  const signed = [said, tail].filter(Boolean).join('\n\n')
-  yield writer.say(`${report && writer.spoke ? '\n\n' : said ? `${said}\n\n` : ''}${tail}`)
+  // A child's warnings, as its parent's: after what it said, before the signature or why it failed.
+  const noted = notices.join('\n')
+  const signed = [said, noted, tail].filter(Boolean).join('\n\n')
+  yield writer.say(`${report && writer.spoke ? '\n\n' : said ? `${said}\n\n` : ''}${noted ? `${noted}\n\n` : ''}${tail}`)
   if (handback) return yield* deliver(name, e, writer.index + 1, signed, null)
   return yield* respond(e, [{ kind: 'stop', stopReason: 'end_turn', usage: null }], signed)
 }

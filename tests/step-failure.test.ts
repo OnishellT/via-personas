@@ -114,6 +114,19 @@ test('a failed nested child keeps its partial text and ends with the failure, ne
   expect(child.requests()).toBe(0)
 })
 
+test("a nested child's notice is said in its own answer, after what it said and before its signature", async ($, on) => {
+  const notice = {
+    sessionId: CHILD,
+    update: { sessionUpdate: 'notice', severity: 'info', title: 'Model rerouted', description: 'Switched from a to b.' },
+  }
+  const child = await nestedChild($, on, undefined, undefined, false, [notice])
+  const pending = run($, { ...STEP, turnId: 'nested', agentId: 'n1', model: 'gpt-6-luna' })
+  await child.clock.settle()
+  await child.finish()
+  const { result } = await pending
+  expect(result.answer).toBe('steps.ts\n\nModel rerouted. Switched from a to b.\n\n— answered by codex subagent, gpt-6-luna')
+})
+
 test("a nested step whose hook throws ends in via, never as a model request with the harness's model", async ($, on) => {
   const child = await nestedChild($, on, undefined, 'transcript')
   const { result } = await run($, { ...STEP, turnId: 'nested', agentId: 'n1' })
