@@ -385,12 +385,12 @@ test("a resumed agent keeps its session and model: a resume's spawn is the same 
   expect(spawns[1]?.env?.RELAY_MODEL).toBe('gpt-6-luna')
 })
 
-test('only read-only sets a codex mode; otherwise the permission mode decides how its own questions are answered', () => {
+test("read-only and bypass set codex's sandbox; otherwise the permission mode decides how its questions are answered", () => {
   // Never codex-acp's own default, auto review, which approves escalations itself.
   expect(codexMode({}, 'default')).toEqual({ agentMode: 'workspace-write', policy: 'ask' })
   expect(codexMode({}, 'acceptEdits')).toEqual({ agentMode: 'workspace-write', policy: 'ask' })
   expect(codexMode({}, 'auto')).toEqual({ agentMode: 'workspace-write', policy: 'ask' })
-  expect(codexMode({}, 'bypassPermissions')).toEqual({ agentMode: 'workspace-write', policy: 'allow' })
+  expect(codexMode({}, 'bypassPermissions')).toEqual({ agentMode: 'agent-full-access', policy: 'allow' })
   expect(codexMode({}, 'dontAsk')).toEqual({ agentMode: 'workspace-write', policy: 'deny' })
   expect(codexMode({}, 'plan')).toEqual({ agentMode: 'read-only', policy: 'deny' })
   expect(codexMode({ tools: 'read' }, 'bypassPermissions')).toEqual({ agentMode: 'read-only', policy: 'deny' })
@@ -427,7 +427,7 @@ test('a read-only run whose MCP listing fails is refused, with no spawn', async 
   expect(result.answer).toContain('cannot run read-only here')
 })
 
-test('a bypass-mode run lists no MCP servers, sets no CODEX_CONFIG, and approves what codex asks', async ($, on) => {
+test('a bypass-mode run has full access, lists no MCP servers, sets no CODEX_CONFIG, and approves what codex asks', async ($, on) => {
   const spawns: Spawn[] = []
   const listed: string[][] = []
   arrange(on, spawns, undefined, { mode: 'bypassPermissions', listed })
@@ -435,7 +435,7 @@ test('a bypass-mode run lists no MCP servers, sets no CODEX_CONFIG, and approves
   await runTurn($)
   expect(listed).toEqual([])
   expect(spawns[0]?.env?.CODEX_CONFIG).toBeUndefined()
-  expect(spawns[0]?.env).toMatchObject({ RELAY_AGENT_MODE: 'workspace-write', RELAY_POLICY: 'allow' })
+  expect(spawns[0]?.env).toMatchObject({ RELAY_AGENT_MODE: 'agent-full-access', RELAY_POLICY: 'allow' })
 })
 
 test("codex's permission question reaches the person, and their choice goes to the inbox", async ($, on) => {

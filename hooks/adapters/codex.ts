@@ -5,9 +5,10 @@ import { type AcpMode, type AcpSpec, acpMode, acpStart } from '../acp/spec'
 import type { Adapter, Mode } from '../adapter'
 
 // Read-only is the one mode via defends. Otherwise codex works in its workspace sandbox and asks before
-// going past it, as codex exec did; the question reaches the person, except in bypass (approved) and
-// dontAsk (denied). Never codex-acp's own default, auto review: its reviewer approved a network
-// escalation itself, and nobody was asked (reproduced).
+// going past it, as codex exec did; the question reaches the person, except in dontAsk (denied). Bypass
+// runs it with full access: there every question would be approved anyway, so the sandbox only cost a
+// round trip per escalation, or a command that failed when the model did not ask. Never codex-acp's own
+// default, auto review: its reviewer approved a network escalation itself, and nobody was asked (reproduced).
 export const CODEX: AcpSpec = {
   name: 'codex',
   // Replaced by the installed codex-acp at each run.
@@ -17,7 +18,7 @@ export const CODEX: AcpSpec = {
   steer: 'steering',
   modes: {
     readOnly: { agentMode: 'read-only', policy: 'deny' },
-    bypassPermissions: { agentMode: 'workspace-write', policy: 'allow' },
+    bypassPermissions: { agentMode: 'agent-full-access', policy: 'allow' },
     dontAsk: { agentMode: 'workspace-write', policy: 'deny' },
     default: { agentMode: 'workspace-write', policy: 'ask' },
   },
@@ -31,7 +32,7 @@ export function codexMode(choice: Choice, mode: Mode): AcpMode {
 export const codex = {
   name: 'codex',
   bin: 'codex',
-  about: "Codex CLI agent: OpenAI's models, own tools in Codex's sandbox; asks you before going past it.",
+  about: "Codex CLI agent: OpenAI's models, own tools in Codex's sandbox (none in bypass mode); asks you before going past it.",
   // The models Codex's own picker lists, best first; hidden ones are internal.
   catalogue: {
     argv: ['codex', 'debug', 'models'],

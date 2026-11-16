@@ -56,8 +56,9 @@ A message to a running Codex, OpenCode or pi agent reaches it at its next step; 
 ## Permissions
 
 - **Read-only:** Codex runs in its read-only sandbox with MCP servers and plugins off; OpenCode and pi get reading tools only.
+- **Bypass mode:** Codex runs with full access, no sandbox, as Claude Code itself does in bypass: its commands reach any file and the network.
 - **Otherwise:** Codex works in its workspace sandbox and asks before going past it; OpenCode, pi and agy use their own permission settings. Codex also edits outside a Git repository.
-- A harness's question (Codex past its sandbox, OpenCode where its config says `ask`) shows in Claude Code's dialog with only a one-time allow and a deny. There's no "always allow", so no approval outlives the run. No answer, or `claude -p`, is a deny. Bypass mode approves; don't-ask mode denies. The mode is set when the agent starts and stays for its follow-ups. pi and agy never ask.
+- A harness's question (Codex past its sandbox, OpenCode where its config says `ask`) shows in Claude Code's dialog with only a one-time allow and a deny. There's no "always allow", so no approval outlives the run. No answer, or `claude -p`, is a deny. Bypass mode approves; don't-ask mode denies. The mode is set when the agent starts; a follow-up to an agent that finished takes the current one. pi and agy never ask.
 - When a harness starts its own subagent, `via` approves that call without asking you.
 
 ## Harnesses
