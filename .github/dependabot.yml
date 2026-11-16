@@ -29,6 +29,18 @@ updates:
     directory: /ci/opencode
     schedule:
       interval: weekly
+  # testy, ACP's reference agent, which CI's harnesses job runs the relay against: a git dependency on
+  # rust-sdk's main, its commit in Cargo.lock.
+  - package-ecosystem: cargo
+    directory: /ci/testy
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: "agent-client-protocol*"
+    # Both come from rust-sdk's one commit: one PR moves it.
+    groups:
+      rust-sdk:
+        patterns: ["agent-client-protocol*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

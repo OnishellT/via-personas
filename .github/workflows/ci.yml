@@ -68,7 +68,7 @@ jobs:
   # The real codex-acp and opencode behind the real relay, the model a local fake: no tokens, no network, no
   # login (relay/test/real-*.test.mts). Elsewhere those tests skip, as the harnesses aren't installed. Every
   # version is one Dependabot bumps: codex-acp from relay/codex-acp, installed as via installs it; Codex from
-  # ci/codex; OpenCode from ci/opencode/Dockerfile.
+  # ci/codex; OpenCode from ci/opencode/Dockerfile; testy, ACP's reference agent, from ci/testy/Cargo.lock.
   harnesses:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -94,10 +94,18 @@ jobs:
           gh release download "v$version" -R anomalyco/opencode -p opencode-linux-x64.tar.gz -D "$RUNNER_TEMP/opencode"
           tar -xzf "$RUNNER_TEMP/opencode/opencode-linux-x64.tar.gz" -C "$RUNNER_TEMP/opencode"
           echo "$RUNNER_TEMP/opencode" >> "$GITHUB_PATH"
+      # testy (relay/test/testy.test.mts): a few minutes cold, seconds from the cache, keyed on its lockfile.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ci/testy -> target
+      - name: Build testy
+        run: |
+          cargo build --locked --manifest-path ci/testy/Cargo.toml
+          echo "ACP_TESTY=$PWD/ci/testy/target/debug/testy" >> "$GITHUB_ENV"
       - name: Relay tests, none skipped
         run: |
           set -o pipefail
           codex --version && opencode --version
           npx -y pnpm@12.15.0 install --frozen-lockfile
           npx -y pnpm@12.15.0 test:relay | tee "$RUNNER_TEMP/relay.log"
-          grep -q '^ℹ skipped 0$' "$RUNNER_TEMP/relay.log" || { echo "::error::a real-harness test skipped"; exit 1; }
+          grep -q '^ℹ skipped 0$' "$RUNNER_TEMP/relay.log" || { echo "::error::a harness or testy test skipped: one of them is missing"; exit 1; }

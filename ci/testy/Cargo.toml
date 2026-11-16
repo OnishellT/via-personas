@@ -1,0 +1,19 @@
+# testy, the ACP Rust SDK's deterministic agent, which relay/test/testy.test.mts runs the relay against.
+# Not part of via: built only for that test. Cargo.lock pins the rust-sdk commit; Dependabot's cargo ecosystem
+# moves it along rust-sdk's main.
+[package]
+name = "via-testy"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "testy"
+path = "main.rs"
+
+[dependencies]
+agent-client-protocol = { git = "https://github.com/agentclientprotocol/rust-sdk", branch = "main", features = ["stdio"] }
+agent-client-protocol-test = { git = "https://github.com/agentclientprotocol/rust-sdk", branch = "main" }
+anyhow = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = "0.3"
