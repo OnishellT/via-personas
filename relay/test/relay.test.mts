@@ -153,6 +153,14 @@ test("a person's config line sets only options that tune the model: never a mode
     })
 })
 
+test('a config line refused where the agent offers no option that tunes the model says so', async () => {
+  assert.deepEqual(outcome(await person({ mode: 'plan' }, { FAKE_OPTIONS: 'plain' })), {
+    status: 1,
+    error: 'mode is not an option a config line sets: only ones that tune the model, and the agent offers none. config: mode= drops it.',
+    set: [],
+  })
+})
+
 test("a refused model, mode or config option keeps the agent's reason, not only 'Invalid params'", async () => {
   const refused = async (env: Record<string, string>) => {
     const run = await configured({ FAKE_REFUSE: '1', ...env })

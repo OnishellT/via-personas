@@ -10461,7 +10461,7 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
     const option = configOptions.find((o) => o.id === configId);
     if (option && reserved(option))
       fail(
-        `${configId} is not an option a config line sets: only ones that tune the model, such as ${settable().join(", ") || "none here"}. config: ${configId}= drops it.`
+        `${configId} is not an option a config line sets: only ones that tune the model, ${settable().length > 0 ? `such as ${settable().join(", ")}` : "and the agent offers none"}. config: ${configId}= drops it.`
       );
     if (option === void 0) {
       const title = `the agent offers no ${configId} option${forModel}, so this run goes without it; it offers ${settable().join(", ") || "none"}. config: ${configId}= drops it.`;

@@ -24,7 +24,7 @@ const select = (id: string, category: string, currentValue: string, values: read
   options: values.map((value) => ({ value, name: value })),
 })
 // As codex-acp 2.6.0 offers them for gpt-6-luna: no ultra.
-const OPTIONS: acp.SessionConfigOption[] = [
+const ALL_OPTIONS: acp.SessionConfigOption[] = [
   select('model', 'model', 'gpt-6-luna', ['gpt-6-luna', 'gpt-6.1-sol']),
   select('reasoning_effort', 'thought_level', 'medium', ['low', 'medium', 'high', 'xhigh']),
   select('mode', 'mode', 'read-only', ['read-only', 'agent-full-access']),
@@ -32,6 +32,8 @@ const OPTIONS: acp.SessionConfigOption[] = [
   // As a harness might name a looser sandbox: no category via knows.
   select('sandbox', 'other', 'on', ['on', 'off']),
 ]
+// FAKE_OPTIONS=plain offers none that tune the model, as opencode's are.
+const OPTIONS = process.env.FAKE_OPTIONS === 'plain' ? ALL_OPTIONS.filter((o) => o.category !== 'model_config') : ALL_OPTIONS
 let release: (() => void) | undefined
 // The stop reasons a prompt may end with: each one checked against the SDK's.
 const STOPS = ['end_turn', 'max_tokens', 'max_turn_requests', 'refusal', 'cancelled'] as const satisfies readonly acp.StopReason[]
@@ -43,7 +45,7 @@ await acp
     return { protocolVersion: ctx.params.protocolVersion, agentCapabilities: { promptCapabilities: { image: echo }, sessionCapabilities } }
   })
   .onRequest(acp.methods.agent.session.new, () =>
-    process.env.FAKE_OPTIONS === '1' ? { sessionId: 's1', configOptions: OPTIONS } : { sessionId: 's1' },
+    process.env.FAKE_OPTIONS ? { sessionId: 's1', configOptions: OPTIONS } : { sessionId: 's1' },
   )
   .onRequest(acp.methods.agent.session.setMode, (ctx) => {
     if (process.env.FAKE_REFUSE === '1') throw acp.RequestError.invalidParams(`no mode ${ctx.params.modeId} here; try workspace-write`)

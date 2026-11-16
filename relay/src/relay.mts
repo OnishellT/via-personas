@@ -293,7 +293,7 @@ const result = await acp
       const option = configOptions.find((o) => o.id === configId)
       if (option && reserved(option))
         fail(
-          `${configId} is not an option a config line sets: only ones that tune the model, such as ${settable().join(', ') || 'none here'}. config: ${configId}= drops it.`,
+          `${configId} is not an option a config line sets: only ones that tune the model, ${settable().length > 0 ? `such as ${settable().join(', ')}` : 'and the agent offers none'}. config: ${configId}= drops it.`,
         )
       // Not a failure: an option held from an earlier message may be one this model lacks, such as Codex's
       // fast-mode on a model with no fast tier, and every later message would fail on it.
