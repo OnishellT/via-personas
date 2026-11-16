@@ -142,6 +142,9 @@ function take(s: RunState, c: Context, event: Norm): (TurnStepChunk | Mark)[] {
       if (marks.length > 0) s.writer.boundary()
       return marks
     }
+    // Only ever a subagent's, inside `of`: the parser says none to the run's own session.
+    case 'told':
+      return []
     // A tool call the harness gave no id: a line of text, as it cannot be matched to its end.
     case 'tool':
       return [s.writer.say(event.t)]

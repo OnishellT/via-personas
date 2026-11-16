@@ -11,6 +11,7 @@ export type Read = {
   compaction_update: 'compactionId' | 'summary' | 'status' | 'error'
   usage_update: 'used'
   subagent_update: 'sessionId' | 'title' | 'description' | 'state'
+  session_message: 'messageId' | 'senderSessionId' | 'recipientSessionId' | 'senderMessageId' | 'recipientMessageId' | 'content'
   config_option_update: 'configOptions'
   notice: 'severity' | 'title' | 'description'
 }

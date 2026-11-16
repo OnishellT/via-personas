@@ -130,6 +130,7 @@ export const register: Register = (on, options) => {
     inboxes: new Map(),
     channels: new Map(),
     nested: new Map(),
+    parents: new Map(),
     spawns: new Map(),
     tool: STEP,
     jobs: new Map(),

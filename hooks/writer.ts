@@ -11,6 +11,7 @@ export class StepWriter {
   private kind: 'text' | 'thinking' | undefined
   private listed = '' // the plan last shown
   private plans = 0
+  private tolds = 0
 
   constructor(first = 0) {
     this.index = first - 1
@@ -65,6 +66,15 @@ export class StepWriter {
     this.plans += 1
     const id = `plan-${this.plans}`
     return [this.call(id, { kind: 'plan', title: 'Plan' }, usage), { kind: 'call-end', id, output: listed, failed: false }]
+  }
+
+  // A message to a nested agent while it works, which the harness delivered: a row of its own, opened and
+  // closed at once, in Claude Code's words for an agent's task from another ("From another agent"). Shown
+  // only: the harness already has it, so nothing steers with it, and it is no part of the answer.
+  told(text: string): Mark[] {
+    this.tolds += 1
+    const id = `told-${this.tolds}`
+    return [this.call(id, { kind: 'message', title: 'From another agent' }, null), { kind: 'call-end', id, output: text, failed: false }]
   }
 }
 

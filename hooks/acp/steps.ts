@@ -16,7 +16,7 @@ export type Mark =
   // A question no longer needing an answer: the hook waiting on the person for it stops.
   | { kind: 'question-closed'; id: string }
   // A harness's subagent to show as an agent nested under this one: the step calls the Agent tool.
-  | { kind: 'spawn'; child: string; type: string; title: string; description?: string }
+  | { kind: 'spawn'; child: string; type: string; title: string; prompt?: string }
 // What a step call carries: the harness's call, or its question to the person, which the step server asks
 // through Claude Code's own form (MCP elicitation).
 export type CallInput = { kind: string; title: string; path?: string; question?: Question }
@@ -186,7 +186,7 @@ export async function* pump(
         job.count += 1
         const id = `${CHILD_CALL}${e.turnId.replace(/[^A-Za-z0-9_]/g, '_')}_${job.count}`
         w.spawns.set(id, c.child)
-        const input = { description: c.title, prompt: c.description || c.title, subagent_type: c.type, run_in_background: true }
+        const input = { description: c.title, prompt: c.prompt || c.title, subagent_type: c.type, run_in_background: true }
         const index = block(-1 - job.count)
         yield { kind: 'tool', index, id, name: 'Agent' }
         yield { kind: 'input', index, json: JSON.stringify(input) }

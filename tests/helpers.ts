@@ -159,6 +159,7 @@ export function testWorld(given: Partial<World> = {}): World {
     inboxes: new Map(),
     channels: new Map(),
     nested: new Map(),
+    parents: new Map(),
     spawns: new Map(),
     tool: 'mcp__plugin_via_step__step',
     jobs: new Map(),

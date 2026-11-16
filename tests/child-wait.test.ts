@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Mark } from '../hooks/acp/steps'
 import { type Children, childRun, route } from '../hooks/children'
 
-const world = (): Children => ({ channels: new Map(), nested: new Map() })
+const world = (): Children => ({ channels: new Map(), nested: new Map(), parents: new Map() })
 
 async function drain(gen: AsyncGenerator<TurnStepChunk | Mark, TurnStepResult>) {
   const out: (TurnStepChunk | Mark)[] = []

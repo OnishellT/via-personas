@@ -93,7 +93,45 @@ test('a refused or limit-stopped subagent says why, by the same mapping as the r
   expect(idle('end_turn')).toEqual([child])
 })
 
-const world = (): Children => ({ channels: new Map(), nested: new Map() })
+test("a message to a subagent is said once, whichever of its two views comes first; one to the run's own session is not", () => {
+  const parse = relayEvents()
+  parse(JSON.stringify(CAPTURED[0]))
+  parse(JSON.stringify(CAPTURED[1]))
+  const message = (sessionId: string, update: Record<string, unknown>) =>
+    parse(JSON.stringify({ sessionId, update: { sessionUpdate: 'session_message', ...update } }))
+  const text = (t: string) => [{ type: 'text', text: t }]
+  // The child's incoming view first, unlinked; then the parent's outgoing view, which names it.
+  expect(message(CHILD, { messageId: 'in1', recipientSessionId: CHILD, content: text('Search acp.') })).toEqual([
+    { k: 'of', child: CHILD, norm: { k: 'told', t: 'Search acp.' } },
+  ])
+  expect(
+    message(ROOT, {
+      messageId: 'out1',
+      senderSessionId: ROOT,
+      recipientSessionId: CHILD,
+      recipientMessageId: 'in1',
+      content: text('Search acp.'),
+    }),
+  ).toEqual([])
+  // A view seen again, or a link added later, says nothing new.
+  expect(message(CHILD, { messageId: 'in1', recipientSessionId: CHILD, content: text('Search acp.') })).toEqual([])
+  expect(message(CHILD, { messageId: 'in1', senderSessionId: ROOT, senderMessageId: 'out1' })).toEqual([])
+  // The other order: the child's incoming view first, naming the outgoing one, which comes unlinked.
+  expect(
+    message(CHILD, {
+      messageId: 'in3',
+      senderSessionId: ROOT,
+      senderMessageId: 'out3',
+      recipientSessionId: CHILD,
+      content: text('Go on.'),
+    }),
+  ).toEqual([{ k: 'of', child: CHILD, norm: { k: 'told', t: 'Go on.' } }])
+  expect(message(ROOT, { messageId: 'out3', senderSessionId: ROOT, recipientSessionId: CHILD, content: text('Go on.') })).toEqual([])
+  // The person's own prompt, as an agent may report it to its session: already in the via agent's view.
+  expect(message(ROOT, { messageId: 'in2', recipientSessionId: ROOT, content: text('Do the thing.') })).toEqual([])
+})
+
+const world = (): Children => ({ channels: new Map(), nested: new Map(), parents: new Map() })
 const of = (child: string, norm: Norm): Extract<Norm, { k: 'of' }> => ({ k: 'of', child, norm })
 
 test("a child's thinking and plan reach its view, but its context stays apart", () => {
@@ -184,13 +222,14 @@ async function drain(gen: AsyncGenerator<TurnStepChunk | Mark, TurnStepResult>) 
   }
 }
 
-test("a subagent's first event spawns its nested agent once, and its nested agent shows its rows then its signed answer", async () => {
+test("a subagent's first work spawns its nested agent once, and its nested agent shows its rows then its signed answer", async () => {
   const w = world()
-  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })).toEqual([
+  // Its announcement and model are not work: it waits for a task to show as its prompt.
+  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })).toEqual([])
+  expect(route(w, 'a1', 'via:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))).toEqual([])
+  expect(route(w, 'a1', 'via:codex', of('c', { k: 'call', id: 'x', kind: 'read', title: 'List files' }))).toEqual([
     { kind: 'spawn', child: 'a1/c#1', type: 'via:codex', title: 'List acp' },
   ])
-  expect(route(w, 'a1', 'via:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))).toEqual([])
-  route(w, 'a1', 'via:codex', of('c', { k: 'call', id: 'x', kind: 'read', title: 'List files' }))
   route(w, 'a1', 'via:codex', of('c', { k: 'called', id: 'x', output: 'steps.ts', failed: false }))
   route(w, 'a1', 'via:codex', of('c', { k: 'text', t: 'steps.ts' }))
   route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
@@ -237,11 +276,11 @@ test('work after a subagent went idle is a new nested agent with the same title'
   const w = world()
   route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })
   route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
-  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'running' })).toEqual([
+  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'running' })).toEqual([])
+  // Found by review: each assignment keeps its own queue, so two nested agents never split one.
+  expect(route(w, 'a1', 'via:codex', of('c', { k: 'text', t: 'second' }))).toEqual([
     { kind: 'spawn', child: 'a1/c#2', type: 'via:codex', title: 'List acp' },
   ])
-  // Found by review: each assignment keeps its own queue, so two nested agents never split one.
-  route(w, 'a1', 'via:codex', of('c', { k: 'text', t: 'second' }))
   expect(w.channels.get('a1/c#1')?.queue).toEqual([{ k: 'end' }])
   expect(w.channels.get('a1/c#2')?.queue).toEqual([{ k: 'text', t: 'second' }])
 })
@@ -264,13 +303,33 @@ test("a subagent with no announcement (codex-acp 2.3.0's own form) still gets a 
 test("a subagent's own subagent is spawned by its nested agent, not the run's", async () => {
   const w = world()
   route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'outer' })
-  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'g', parent: 'c', title: 'inner' })).toEqual([])
+  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'Delegate the search.' }))
+  route(w, 'a1', 'via:codex', { k: 'child', id: 'g', parent: 'c', title: 'inner' })
+  expect(route(w, 'a1', 'via:codex', of('g', { k: 'told', t: 'Search acp.' }))).toEqual([])
   route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
   w.nested.set('n1', 'a1/c#1')
   const { out } = await drain(
     childRun(w, 'n1', 'codex', { turnId: 't1', index: 0 }, new AbortController().signal, false, () => new Promise(() => {})),
   )
-  expect(out.filter((c) => c.kind === 'spawn')).toEqual([{ kind: 'spawn', child: 'a1/g#1', type: 'via:codex', title: 'inner' }])
+  expect(out.filter((c) => c.kind === 'spawn')).toEqual([
+    { kind: 'spawn', child: 'a1/g#1', type: 'via:codex', title: 'inner', prompt: 'Search acp.' },
+  ])
+})
+
+test("a subagent's own subagent given new work after its parent's nested agent ended is shown from the run", () => {
+  const w = world()
+  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'outer' })
+  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'Delegate the search.' }))
+  route(w, 'a1', 'via:codex', { k: 'child', id: 'g', parent: 'c', title: 'inner' })
+  route(w, 'a1', 'via:codex', of('g', { k: 'told', t: 'Search acp.' }))
+  route(w, 'a1', 'via:codex', { k: 'child', id: 'g', parent: 'c', state: 'idle' })
+  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  // Its nested agent has read its end: nothing reads its queue any more.
+  const outer = w.channels.get('a1/c#1')
+  if (outer) outer.read = true
+  expect(route(w, 'a1', 'via:codex', of('g', { k: 'told', t: 'Search again.' }))).toEqual([
+    { kind: 'spawn', child: 'a1/g#2', type: 'via:codex', title: 'inner', prompt: 'Search again.' },
+  ])
 })
 
 test('a spawn mark ends the step with an Agent call in the background, remembered for its spawn', async () => {

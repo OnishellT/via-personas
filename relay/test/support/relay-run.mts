@@ -162,6 +162,7 @@ export const send = (inbox: string, value: unknown) => appendFileSync(inbox, `${
 
 const isRelay = (e: Printed): e is RelayEvent => typeof (e as { relay?: unknown }).relay === 'string'
 
+export const notifications = (events: readonly Printed[]): SessionNotification[] => events.flatMap((e) => (isRelay(e) ? [] : [e]))
 export const updates = (events: readonly Printed[]): SessionUpdate[] => events.flatMap((e) => (isRelay(e) ? [] : [e.update]))
 export const answer = (events: readonly Printed[]) =>
   updates(events)

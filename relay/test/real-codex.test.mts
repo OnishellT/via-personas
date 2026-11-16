@@ -8,11 +8,20 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, test } from 'node:test'
-import { execCommandResponse, type FakeModel, functionCallResponse, hang, startFakeModel, textResponse } from './support/fake-model.mts'
+import {
+  execCommandResponse,
+  type FakeModel,
+  functionCallResponse,
+  hang,
+  type ModelRequest,
+  startFakeModel,
+  textResponse,
+} from './support/fake-model.mts'
 import {
   answer,
   get,
   installed,
+  notifications,
   relayEvent,
   relayEvents,
   relayEventsNamed,
@@ -23,6 +32,7 @@ import {
   spoken,
   startRelay,
   toolCalls,
+  updates,
 } from './support/relay-run.mts'
 
 const lock = JSON.parse(readFileSync(new URL('../codex-acp/package-lock.json', import.meta.url), 'utf8')) as {
@@ -174,4 +184,59 @@ test("Codex's own question reaches the relay as a form, and the person's choice 
   const output = (fake.requests[1]?.input ?? []).find((i) => i.type === 'function_call_output' && i.call_id === 'call_q')
   assert.deepEqual(JSON.parse(String(get(output, 'output'))), { answers: { target: { answers: ['production'] } } })
   assert.deepEqual(fake.unexpected, [])
+})
+
+// Codex's own multi-agent tools (`multi_agent`, on by default), called as the model calls them. The child
+// answers its task only once the parent has sent the follow-up, as a child still working when it arrives.
+const SPAWN = 'Reply with only the word KESTREL.'
+const FOLLOWUP = 'Now reply with only the word OSPREY.'
+
+test("a subagent's task and a follow-up sent while it works reach the relay as messages to it, each from both sides", {
+  skip,
+}, async () => {
+  const b = box(['multi_agent = true'])
+  let release = () => {}
+  const followedUp = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const users = (body: ModelRequest) => JSON.stringify((body.input ?? []).filter((i) => i.type === 'message' && i.role === 'user'))
+  const agent = (body: ModelRequest) => {
+    const spawned = (body.input ?? []).find((i) => i.type === 'function_call_output' && i.call_id === 'spawn')
+    return spawned ? String((JSON.parse(String((spawned as { output?: unknown }).output)) as { agent_id?: unknown }).agent_id) : ''
+  }
+  for (let i = 0; i < 20; i++)
+    fake.enqueue(async (body) => {
+      if (users(body).includes(SPAWN)) {
+        if (users(body).includes(FOLLOWUP)) return textResponse('OSPREY')
+        await followedUp
+        return textResponse('KESTREL')
+      }
+      const outputs = (body.input ?? []).filter((item) => item.type === 'function_call_output').length
+      const target = agent(body)
+      if (outputs === 0) return functionCallResponse('spawn', 'spawn_agent', { message: SPAWN }, 'multi_agent_v1')
+      if (outputs === 1) return functionCallResponse('followup', 'send_input', { target, message: FOLLOWUP }, 'multi_agent_v1')
+      if (outputs === 2) {
+        release()
+        return functionCallResponse('wait', 'wait_agent', { targets: [target] }, 'multi_agent_v1')
+      }
+      return textResponse('DONE')
+    })
+  const run = await codex(b, 'Delegate this.')
+  assert.equal(run.status, 0, run.stderr)
+  const root = sessionOf(run.events)
+  const child = updates(run.events).find((u) => u.sessionUpdate === 'subagent_update')?.sessionId
+  assert.equal(typeof child, 'string')
+  // Each message: the parent's outgoing view, then the child's incoming one, linked to it.
+  const views = notifications(run.events).flatMap(({ sessionId, update: u }) =>
+    u.sessionUpdate === 'session_message' && u.content
+      ? [{ session: sessionId, to: u.recipientSessionId, linked: u.senderMessageId !== undefined, text: get(u, 'content', '0', 'text') }]
+      : [],
+  )
+  assert.deepEqual(views, [
+    { session: root, to: child, linked: false, text: SPAWN },
+    { session: child, to: child, linked: true, text: SPAWN },
+    { session: root, to: child, linked: false, text: FOLLOWUP },
+    { session: child, to: child, linked: true, text: FOLLOWUP },
+  ])
+  assert.equal(answer(run.events.filter((e) => !('sessionId' in e) || e.sessionId === root)), 'DONE')
 })

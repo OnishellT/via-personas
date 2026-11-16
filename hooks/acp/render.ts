@@ -6,7 +6,7 @@ export const NO_OUTPUT = 'Done; no output reported.'
 
 // A diff's lines and a plan's entries are what the row is for, so more of them show before it folds;
 // a compaction's summary is not, as Claude Code keeps its own behind ctrl+o.
-const FOLDED: Record<string, number> = { edit: 12, plan: 12, compact: 1 }
+const FOLDED: Record<string, number> = { edit: 12, plan: 12, message: 12, compact: 1 }
 // The calls whose row reads as a verb on its title.
 const VERBS: Record<string, [string, string]> = {
   execute: ['Running', 'Ran'],
@@ -39,6 +39,7 @@ const COUNTED: Record<string, [string, string, string, string]> = {
   move: ['Moving', 'Moved', 'file', 'files'],
   fetch: ['Fetching', 'Fetched', 'page', 'pages'],
   question: ['Asking', 'Asked', 'question', 'questions'],
+  message: ['Receiving', 'Received', 'message', 'messages'],
 }
 
 // The line Claude Code folds a run of harness tool calls into, counted by what each did ("Read 3 files,

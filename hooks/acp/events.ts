@@ -336,6 +336,30 @@ export function relayEvents(from = 'the agent'): (line: string) => Norm[] {
   let root: string | undefined
   const own = sessionEvents(() => cwd, from)
   const children = new Map<string, ReturnType<typeof sessionEvents>>()
+  // A message between sessions (ACP's session_message): a subagent's task or a later instruction, as the sender's
+  // outgoing view or the subagent's incoming one. An agent that sees both sides sends both, linked by id
+  // (codex-acp: the outgoing first, linked by a later update): the first view is said, the other skipped. A
+  // view with no content (a link added later) and a message to the run's own session say nothing.
+  const heard = new Set<string>() // `${session}\n${messageId}` of each view seen
+  const told = (u: Extract<SessionUpdate, { sessionUpdate: 'session_message' }>, session: string): Norm[] => {
+    if (typeof u.messageId !== 'string' || !Array.isArray(u.content)) return []
+    const self = `${session}\n${u.messageId}`
+    if (heard.has(self)) return []
+    heard.add(self)
+    const outgoing = typeof u.recipientSessionId === 'string' && u.recipientSessionId !== session
+    const to = outgoing ? String(u.recipientSessionId) : session
+    const other = outgoing
+      ? typeof u.recipientMessageId === 'string' && `${to}\n${u.recipientMessageId}`
+      : typeof u.senderSessionId === 'string' && typeof u.senderMessageId === 'string' && `${u.senderSessionId}\n${u.senderMessageId}`
+    if (to === root || (other && heard.has(other))) return []
+    // The view this one names, when it comes second unlinked, is the same message.
+    if (other) heard.add(other)
+    const t = u.content
+      .map((block) => blockText(block, from))
+      .filter(Boolean)
+      .join('\n')
+    return t ? [{ k: 'of', child: to, norm: { k: 'told', t } }] : []
+  }
   return (line) => {
     let e: unknown
     try {
@@ -389,6 +413,7 @@ export function relayEvents(from = 'the agent'): (line: string) => Norm[] {
     if (!live || !isRecord(e.update) || typeof e.update.sessionUpdate !== 'string') return []
     const u = e.update as SessionUpdate
     const session = typeof e.sessionId === 'string' ? e.sessionId : root
+    if (u.sessionUpdate === 'session_message') return session === undefined ? [] : told(u, session)
     if (u.sessionUpdate === 'subagent_update') {
       if (typeof u.sessionId !== 'string' || session === undefined) return []
       const now = isRecord(u.state) ? u.state : undefined
