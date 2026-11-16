@@ -11,18 +11,18 @@ import { Readable, Writable } from 'node:stream'
 import * as acp from '@agentclientprotocol/sdk/unstable'
 
 const echo = process.env.FAKE_ECHO === '1'
-const log = (what) => process.env.FAKE_LOG && appendFileSync(process.env.FAKE_LOG, `${what}\n`)
-let offered
-const select = (id, category, currentValue, values) => ({
+const log = (what: string) => process.env.FAKE_LOG && appendFileSync(process.env.FAKE_LOG, `${what}\n`)
+let offered: acp.ClientCapabilities | undefined
+const select = (id: string, category: string, currentValue: string, values: readonly string[]): acp.SessionConfigOption => ({
   id,
   name: id,
   category,
-  type: 'select',
+  type: 'select' as const,
   currentValue,
   options: values.map((value) => ({ value, name: value })),
 })
 // As codex-acp 2.6.0 offers them for gpt-6-luna: no ultra.
-const OPTIONS = [
+const OPTIONS: acp.SessionConfigOption[] = [
   select('model', 'model', 'gpt-6-luna', ['gpt-6-luna', 'gpt-6.1-sol']),
   select('reasoning_effort', 'thought_level', 'medium', ['low', 'medium', 'high', 'xhigh']),
   select('mode', 'mode', 'read-only', ['read-only', 'agent-full-access']),
@@ -30,7 +30,9 @@ const OPTIONS = [
   // As a harness might name a looser sandbox: no category via knows.
   select('sandbox', 'other', 'on', ['on', 'off']),
 ]
-let release
+let release: (() => void) | undefined
+// The stop reasons a prompt may end with: each one checked against the SDK's.
+const STOPS = ['end_turn', 'max_tokens', 'max_turn_requests', 'refusal', 'cancelled'] as const satisfies readonly acp.StopReason[]
 await acp
   .agent()
   .onRequest(acp.methods.agent.initialize, (ctx) => {
@@ -60,7 +62,14 @@ await acp
   .onRequest(acp.methods.agent.session.prompt, async (ctx) => {
     if (process.env.FAKE_HANG) {
       log('prompt')
-      await new Promise((resolve) => (release = resolve))
+      // Said once the prompt is held, so a test waits on this line, never on time.
+      await ctx.client.notify(acp.methods.client.session.update, {
+        sessionId: 's1',
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'holding' } },
+      })
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
       return { stopReason: 'cancelled' }
     }
     if (!echo) throw acp.RequestError.internalError({ details: "You've hit your usage limit. Try again at 10:04 PM." })
@@ -70,6 +79,8 @@ await acp
       sessionId: 's1',
       update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } },
     })
-    return { stopReason: process.env.FAKE_STOP || 'end_turn' }
+    const stopReason = STOPS.find((stop) => stop === (process.env.FAKE_STOP || 'end_turn'))
+    if (stopReason === undefined) throw new Error(`FAKE_STOP must be one of ${STOPS.join(', ')}`)
+    return { stopReason }
   })
-  .connect(acp.ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin))).closed
+  .connect(acp.ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>)).closed

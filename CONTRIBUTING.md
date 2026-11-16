@@ -9,4 +9,14 @@
 - `hooks/writer.ts` writes a run's steps, for `via` agents and their nested ones.
 - Harness tool calls reach Claude Code as calls to the MCP tool `step`, which runs nothing: `via` answers each with what the harness reported, and refuses a `step` call it didn't make.
 - Nested agents need the harness to report subagents over ACP ([subagents RFD](https://github.com/agentclientprotocol/agent-client-protocol/blob/main/docs/rfds/subagents.mdx)); `codex-acp` does.
-- `pnpm test:relay` tests the relay against a fake agent, and the real codex-acp and `opencode acp` against a fake model (`relay/test/real-*.test.mjs`: no tokens, no login; skipped when a harness isn't installed, run in CI's `harnesses` job). `relay/checks/` holds the live checks, which spend tokens.
+- `pnpm test:relay` tests the relay against a fake agent, and the real codex-acp and `opencode acp` against a fake model (`relay/test/real-*.test.mts`: skipped when a harness isn't installed, run in CI's `harnesses` job). `relay/checks/` holds the live checks, which spend tokens.
+
+## Tests
+
+- TypeScript, type-checked with the code (CI too); fixtures typed against the ACP SDK.
+- A test waits on the event it needs: a model request, a line the relay prints, a notification, a file the command under test writes in one step. Never on time. Each wait fails when the process it waits on ends. The only timers are backstops that end a hung run: `relay/test/support/backstop.mts`, a spawned process's `timeout`, a test's `timeout`.
+- A test checks behaviour where it crosses a boundary: what the relay prints, what a harness or model receives, what Claude reads. Not internal shapes.
+- A new test fails without the change it covers. Show it before committing.
+- No tokens and nothing of yours: the fake agent, the fake model and an empty HOME, no network beyond localhost. What only a real model can show goes in an eval, with a cost cap.
+- A version a test depends on lives where Dependabot bumps it.
+- `pnpm lint` holds every test in the repository to the first two (`checks/tests.mts`).

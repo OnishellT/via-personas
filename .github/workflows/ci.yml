@@ -45,6 +45,10 @@ jobs:
           npx -y pnpm@12.15.0 lint
           # Hooks may import only their own files: their copies of the harnesses' types must match the published ones.
           npx -y pnpm@12.15.0 check:types
+          # The relay, the MCP server and their tests need only Node's types, not the engine's. -p, not -b: build
+          # mode leaves .tsbuildinfo files, which the last step refuses.
+          npx -y pnpm@12.15.0 exec tsc -p relay
+          npx -y pnpm@12.15.0 exec tsc -p mcp
           npx -y pnpm@12.15.0 build:relay
           git diff --exit-code relay/relay.mjs
           npx -y pnpm@12.15.0 test:relay
@@ -62,7 +66,7 @@ jobs:
           fi
 
   # The real codex-acp and opencode behind the real relay, the model a local fake: no tokens, no network, no
-  # login (relay/test/real-*.test.mjs). Elsewhere those tests skip, as the harnesses aren't installed. Every
+  # login (relay/test/real-*.test.mts). Elsewhere those tests skip, as the harnesses aren't installed. Every
   # version is one Dependabot bumps: codex-acp from relay/codex-acp, installed as via installs it; Codex from
   # ci/codex; OpenCode from ci/opencode/Dockerfile.
   harnesses:

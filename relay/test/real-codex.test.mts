@@ -1,5 +1,5 @@
 // The real codex-acp and the real `codex app-server` behind the real relay, with the model a local fake
-// (support/fake-model.mjs): no tokens, no network. Codex reads its provider from CODEX_HOME/config.toml,
+// (support/fake-model.mts): no tokens, no network. Codex reads its provider from CODEX_HOME/config.toml,
 // pointed at the fake, so the relay runs as via runs it, with no login and no change of its own. Skipped
 // when codex or codex-acp is not installed: CODEX_ACP names codex-acp's dist/index.js, or via's own
 // install of the pinned version is used.
@@ -8,16 +8,32 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, test } from 'node:test'
-import { execCommandResponse, hang, startFakeModel, textResponse } from './support/fake-model.mjs'
-import { answer, installed, relayEvent, relayEvents, runRelay, sandbox, send, spoken, startRelay, toolCalls } from './support/relay-run.mjs'
+import { execCommandResponse, type FakeModel, hang, startFakeModel, textResponse } from './support/fake-model.mts'
+import {
+  answer,
+  get,
+  installed,
+  relayEvent,
+  relayEvents,
+  relayEventsNamed,
+  runRelay,
+  sandbox,
+  send,
+  sessionOf,
+  spoken,
+  startRelay,
+  toolCalls,
+} from './support/relay-run.mts'
 
-const lock = JSON.parse(readFileSync(new URL('../codex-acp/package-lock.json', import.meta.url), 'utf8'))
-const pinned = lock.packages['node_modules/@agentclientprotocol/codex-acp'].version
+const lock = JSON.parse(readFileSync(new URL('../codex-acp/package-lock.json', import.meta.url), 'utf8')) as {
+  packages: Record<string, { version?: string }>
+}
+const pinned = lock.packages['node_modules/@agentclientprotocol/codex-acp']?.version
 const codexAcp =
   process.env.CODEX_ACP ?? join(homedir(), `.claude/via/acp/codex-acp-${pinned}/node_modules/@agentclientprotocol/codex-acp/dist/index.js`)
 const skip = !installed('codex') ? 'codex is not on PATH' : !existsSync(codexAcp) ? `codex-acp is not at ${codexAcp}` : false
 
-let fake
+let fake: FakeModel
 beforeEach(async () => {
   fake = await startFakeModel()
 })
@@ -49,8 +65,14 @@ const box = () => {
   )
   return { ...b, env: { HOME: b.home, CODEX_HOME: codexHome, CODEX_PATH: 'codex' } }
 }
+type Box = ReturnType<typeof box>
 
-const codex = (b, prompt, env = {}) => runRelay({ agent: ['node', codexAcp], prompt, cwd: b.work, env: { ...b.env, ...env } })
+const codex = (b: Box, prompt: string, env: Record<string, string> = {}) =>
+  runRelay({ agent: ['node', codexAcp], prompt, cwd: b.work, env: { ...b.env, ...env } })
+
+/** What request `n` carried, by role: Codex sends each message's content as a list of parts. */
+const said = (n: number, role: string) =>
+  (fake.requests[n]?.input ?? []).filter((i) => i.type === 'message' && i.role === role).map((i) => JSON.stringify(i.content))
 
 test('a scripted answer arrives as the answer, and the run ends done', { skip }, async () => {
   const b = box()
@@ -72,12 +94,12 @@ test('a scripted shell command arrives as a tool call with its output, and Codex
   const [call, ...rest] = toolCalls(run.events)
   assert.equal(call?.toolCallId, 'call_shell')
   assert.equal(call?.kind, 'execute')
-  assert.equal(call?.rawInput.command, 'echo shell-ok')
+  assert.equal(get(call, 'rawInput', 'command'), 'echo shell-ok')
   const done = rest.find((u) => u.status === 'completed')
-  assert.equal(done?._meta.terminal_output_delta.data, 'shell-ok\n')
-  assert.equal(done?._meta.terminal_exit.exit_code, 0)
+  assert.equal(get(done, '_meta', 'terminal_output_delta', 'data'), 'shell-ok\n')
+  assert.equal(get(done, '_meta', 'terminal_exit', 'exit_code'), 0)
   assert.equal(answer(run.events), 'ran it')
-  const output = fake.requests[1].input.find((i) => i.type === 'function_call_output' && i.call_id === 'call_shell')
+  const output = fake.requests[1]?.input?.find((i) => i.type === 'function_call_output' && i.call_id === 'call_shell')
   assert.match(JSON.stringify(output), /shell-ok/)
   assert.deepEqual(fake.unexpected, [])
 })
@@ -87,18 +109,17 @@ test('a follow-up resumes the session, and Codex sends the model the earlier tur
   fake.enqueue(textResponse('PONG'))
   const first = await codex(b, 'Reply with only the word PONG.')
   assert.equal(first.status, 0, first.stderr)
-  const sessionId = relayEvent(first.events, 'session')?.sessionId
+  const sessionId = sessionOf(first.events)
   fake.enqueue(textResponse('You said PONG.'))
   // A new relay and a new codex-acp, as via starts for each message.
   const second = await codex(b, 'What did you reply?', { RELAY_SESSION: sessionId })
   assert.equal(second.status, 0, second.stderr)
-  assert.equal(relayEvent(second.events, 'session')?.sessionId, sessionId)
+  assert.equal(sessionOf(second.events), sessionId)
   // The resumed session replays its history before the new prompt's answer.
   assert.deepEqual(spoken(second.events), { replayed: 'PONG', answered: 'You said PONG.' })
-  const said = (role) => fake.requests[1].input.filter((i) => i.type === 'message' && i.role === role).map((i) => JSON.stringify(i.content))
-  assert.match(said('user').join(), /Reply with only the word PONG\./)
-  assert.match(said('assistant').join(), /PONG/)
-  assert.match(said('user').join(), /What did you reply\?/)
+  assert.match(said(1, 'user').join(), /Reply with only the word PONG\./)
+  assert.match(said(1, 'assistant').join(), /PONG/)
+  assert.match(said(1, 'user').join(), /What did you reply\?/)
 })
 
 test('an interrupt cancels the turn and runs its text next, in the same session', { skip }, async () => {
@@ -110,14 +131,14 @@ test('an interrupt cancels the turn and runs its text next, in the same session'
     cwd: b.work,
     env: { ...b.env, RELAY_INBOX: b.inbox },
   })
-  await fake.requested(1)
+  await fake.requested(1, run.exited)
   send(b.inbox, { interrupt: 'Stop. Reply with only the word REDIRECTED.' })
   assert.equal(await run.exited, 0, run.stderr)
   assert.deepEqual(relayEvents(run.events), ['session', 'model', 'steered', 'prompt_done', 'interrupted', 'steered', 'prompt_done', 'done'])
   assert.deepEqual(
-    run.events.filter((e) => e.relay === 'prompt_done').map((e) => e.stopReason),
+    relayEventsNamed(run.events, 'prompt_done').map((e) => e.stopReason),
     ['cancelled', 'end_turn'],
   )
   assert.equal(answer(run.events), 'REDIRECTED')
-  assert.match(JSON.stringify(fake.requests.at(-1).input), /Stop\. Reply with only the word REDIRECTED\./)
+  assert.match(JSON.stringify(fake.requests.at(-1)?.input), /Stop\. Reply with only the word REDIRECTED\./)
 })

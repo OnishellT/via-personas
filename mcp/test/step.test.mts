@@ -5,7 +5,14 @@ import { test } from 'node:test'
 
 const server = new URL('../step.mts', import.meta.url).pathname
 
-const answers = (...requests) => {
+/** A JSON-RPC answer from the server, by the fields the tests read. */
+type Answer = {
+  readonly id?: number
+  readonly result?: { readonly protocolVersion?: string; readonly tools?: readonly { readonly name: string }[]; readonly isError?: boolean }
+  readonly error?: { readonly code: number }
+}
+
+const answers = (...requests: (string | Record<string, unknown>)[]): Answer[] => {
   const run = spawnSync('node', [server], {
     input: requests.map((r) => (typeof r === 'string' ? r : JSON.stringify({ jsonrpc: '2.0', ...r }))).join('\n'),
     encoding: 'utf8',
@@ -15,7 +22,7 @@ const answers = (...requests) => {
   return run.stdout
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line))
+    .map((line) => JSON.parse(line) as Answer)
 }
 
 test('a call that reaches the server is refused and runs nothing: only the tool.call hook answers one', () => {
@@ -25,12 +32,12 @@ test('a call that reaches the server is refused and runs nothing: only the tool.
     { id: 2, method: 'tools/list' },
     { id: 3, method: 'tools/call', params: { name: 'step', arguments: { kind: 'execute', title: 'rm -rf /' } } },
   )
-  assert.equal(init.result.protocolVersion, '2025-06-18')
+  assert.equal(init?.result?.protocolVersion, '2025-06-18')
   assert.deepEqual(
-    list.result.tools.map((t) => t.name),
+    list?.result?.tools?.map((t) => t.name),
     ['step'],
   )
-  assert.equal(call.result.isError, true)
+  assert.equal(call?.result?.isError, true)
 })
 
 test('an unknown method, one every object inherits included, is an error and the server keeps answering', () => {
@@ -43,7 +50,10 @@ test('an unknown method, one every object inherits included, is an error and the
 
 test("the hooks answer the tool Claude Code names after plugin.json's server", () => {
   const root = new URL('../../', import.meta.url)
-  const plugin = JSON.parse(readFileSync(new URL('.claude-plugin/plugin.json', root), 'utf8'))
+  const plugin = JSON.parse(readFileSync(new URL('.claude-plugin/plugin.json', root), 'utf8')) as {
+    name: string
+    mcpServers: Record<string, unknown>
+  }
   const [server] = Object.keys(plugin.mcpServers)
   const hooks = readFileSync(new URL('hooks/register.ts', root), 'utf8')
   assert.match(hooks, new RegExp(`const STEP = 'mcp__plugin_${plugin.name}_${server}__step'`))
