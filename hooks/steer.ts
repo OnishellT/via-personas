@@ -5,7 +5,8 @@ import type { Ask } from './adapter'
 import type { World } from './world'
 
 // interrupt: what an `interrupt:` message asked for; the harness aborts its step, and the core runs it next.
-export type Inbox = { name: string; path: string; lines: string[]; interrupt?: string }
+// files: the folder beside it where the relay saves what the agent sends as bytes.
+export type Inbox = { name: string; path: string; files: string; lines: string[]; interrupt?: string }
 
 const INTERRUPT = /^interrupt:[ \t]*/i
 
@@ -23,7 +24,12 @@ export async function openInbox(
   // folder and write steers or a symlink (fs.write follows links). No usable home: no steering.
   const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
   if (!home) return undefined
-  const inbox: Inbox = { name, path: `${home}/.claude/via/inbox/${name}-${agentId}.jsonl`, lines: [] }
+  const inbox: Inbox = {
+    name,
+    path: `${home}/.claude/via/inbox/${name}-${agentId}.jsonl`,
+    files: `${home}/.claude/via/files/${name}-${agentId}`,
+    lines: [],
+  }
   const opened = await $.fs.write(inbox.path, '').then(
     () => true,
     () => false,

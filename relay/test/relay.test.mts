@@ -2,10 +2,11 @@
 // the relay and the agent, so nothing of the person's (a RELAY_* or FAKE_* variable of theirs) changes a result.
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import type { ClientCapabilities } from '@agentclientprotocol/sdk/unstable'
+import { PNG } from './support/png.mts'
 import {
   answer,
   get,
@@ -311,4 +312,56 @@ test('a question the agent withdraws is closed, said with its id, and nothing wa
   const asked = relayEvent(r.events, 'question')
   assert.ok(asked)
   assert.equal(relayEvent(r.events, 'question_closed')?.id, asked.id)
+})
+
+/** The image block a FAKE_IMAGE run printed. */
+const imaged = async (env: Record<string, string>) => {
+  const r = await fake({ FAKE_IMAGE: '1', ...env })
+  assert.equal(r.status, 0, r.stderr)
+  const chunk = updates(r.events).find((u) => u.sessionUpdate === 'agent_message_chunk')
+  assert.ok(chunk?.sessionUpdate === 'agent_message_chunk' && chunk.content.type === 'image')
+  return chunk.content
+}
+
+test("what the agent sends as bytes is saved to RELAY_FILES, and printed with the file's path in place of its bytes", async () => {
+  const files = join(sandbox().root, 'files')
+  const image = await imaged({ RELAY_FILES: files })
+  assert.equal(image.data, '')
+  const saved = get(image, '_meta', 'relay', 'saved')
+  assert.equal(typeof saved, 'string')
+  assert.ok(String(saved).startsWith(`${files}/`) && String(saved).endsWith('.png'), String(saved))
+  assert.deepEqual(readFileSync(String(saved)), Buffer.from(PNG, 'base64'))
+  assert.equal(get(image, '_meta', 'relay', 'size'), Buffer.from(PNG, 'base64').length)
+})
+
+test("bytes that can't be saved are left out all the same, with the reason", async () => {
+  const b = sandbox()
+  const notAFolder = join(b.root, 'taken')
+  writeFileSync(notAFolder, '')
+  const image = await imaged({ RELAY_FILES: notAFolder })
+  assert.equal(image.data, '')
+  assert.match(String(get(image, '_meta', 'relay', 'notSaved')), /EEXIST|ENOTDIR/)
+})
+
+test('without RELAY_FILES the bytes are printed as the agent sent them', async () => {
+  const image = await imaged({})
+  assert.equal(image.data, PNG)
+  assert.equal(get(image, '_meta', 'relay'), undefined)
+})
+
+test("a resumed session's replayed bytes are not saved again: only what comes after the prompt", async () => {
+  const files = join(sandbox().root, 'files')
+  const r = await fake({ FAKE_IMAGE: '1', RELAY_SESSION: 's1', RELAY_FILES: files })
+  assert.equal(r.status, 0, r.stderr)
+  const images = updates(r.events).flatMap((u) =>
+    (u.sessionUpdate === 'user_message_chunk' || u.sessionUpdate === 'agent_message_chunk') && u.content.type === 'image' ? [u] : [],
+  )
+  assert.deepEqual(
+    images.map((u) => [u.sessionUpdate, u.content.type === 'image' && u.content.data === '']),
+    [
+      ['user_message_chunk', false],
+      ['agent_message_chunk', true],
+    ],
+  )
+  assert.equal(readdirSync(files).length, 1)
 })

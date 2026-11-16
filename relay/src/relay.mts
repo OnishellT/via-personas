@@ -8,6 +8,8 @@
 //                     next, {"answer": id, "optionId": id|null} answers a permission request, {"question": id,
 //                     "answer": {"action": ..., "content": ...}} answers a question (each printed as a
 //                     {"relay":"question"} line; {"relay":"question_closed"} says one no longer needs an answer)
+//   RELAY_FILES       folder for what the agent sends as bytes (an image, audio, a binary resource): each is saved
+//                     there and printed with {"relay": {"saved": path, "size": bytes}} in its _meta, its bytes left out
 //   RELAY_STEER       how a string reaches a running prompt: steering (codex-acp's _session/steering), prompt
 //                     (a second session/prompt, which opencode takes at its next step); unset: queued
 //   RELAY_SESSION     a session to resume (session/load)
@@ -20,7 +22,8 @@
 //                     goes to the plugin)
 // Prints each ACP session update as received, and {"relay": ...} lines for its own events.
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { Readable, Writable } from 'node:stream'
 import * as acp from '@agentclientprotocol/sdk/unstable'
 
@@ -31,6 +34,8 @@ const out = (event: Record<string, unknown>) => process.stdout.write(`${JSON.str
 let agentPid: number | undefined
 // busy: a prompt of the main loop is running. spokeIdle: the agent wrote an answer while none was.
 let busy = false
+// A prompt has gone out: what came before is a resumed session's history, replayed, which nobody reads again.
+let sentPrompt = false
 let spokeIdle = false
 const fail = (message: string): never => {
   out({ relay: 'error', message })
@@ -179,6 +184,61 @@ let asks = 0
 type QuestionAnswer = acp.CreateElicitationResponse
 const questions = new Map<string, (answer: QuestionAnswer) => void>()
 const CANCEL: QuestionAnswer = { action: 'cancel' }
+// What the agent sends as bytes, saved to RELAY_FILES, as Claude Code saves an MCP tool's: the block printed
+// with the file's path and size in place of its bytes. A failed save is said the same way, its bytes still left out.
+const files = process.env.RELAY_FILES
+const EXTENSIONS: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'audio/wav': 'wav',
+  'audio/mpeg': 'mp3',
+  'audio/ogg': 'ogg',
+  'application/pdf': 'pdf',
+}
+let savedCount = 0
+function saved(block: acp.ContentBlock): acp.ContentBlock {
+  const bytes =
+    block.type === 'image' || block.type === 'audio'
+      ? block.data
+      : block.type === 'resource' && 'blob' in block.resource
+        ? block.resource.blob
+        : ''
+  // A resumed session's replayed history is not saved again.
+  if (!files || !bytes || !sentPrompt) return block
+  const mimeType =
+    block.type === 'resource' ? block.resource.mimeType : block.type === 'image' || block.type === 'audio' ? block.mimeType : undefined
+  const data = Buffer.from(bytes, 'base64')
+  const path = join(files, `${RUN}-${++savedCount}.${EXTENSIONS[mimeType ?? ''] ?? 'bin'}`)
+  let relay: Record<string, unknown>
+  try {
+    mkdirSync(files, { recursive: true, mode: 0o700 })
+    writeFileSync(path, data, { mode: 0o600 })
+    relay = { saved: path, size: data.length }
+  } catch (error) {
+    relay = { notSaved: reason(error), size: data.length }
+  }
+  const _meta = { ...block._meta, relay }
+  if (block.type === 'resource' && 'blob' in block.resource) return { ...block, resource: { ...block.resource, blob: '' }, _meta }
+  return block.type === 'image' || block.type === 'audio' ? { ...block, data: '', _meta } : block
+}
+function savedUpdate(update: acp.SessionUpdate): acp.SessionUpdate {
+  switch (update.sessionUpdate) {
+    case 'agent_message_chunk':
+    case 'agent_thought_chunk':
+    case 'user_message_chunk':
+      return { ...update, content: saved(update.content) }
+    case 'tool_call':
+    case 'tool_call_update':
+      return update.content
+        ? { ...update, content: update.content.map((c) => (c.type === 'content' ? { ...c, content: saved(c.content) } : c)) }
+        : update
+    default:
+      return update
+  }
+}
+
 // A question still open that no answer will settle (an interrupt, the agent's own cancel): cancelled, and said
 // with a {"relay":"question_closed"} line, so the plugin stops waiting on the person.
 const closeQuestion = (id: string) => {
@@ -261,7 +321,7 @@ const result = await acp
   })
   .onNotification(acp.methods.client.session.update, (ctx) => {
     if (!busy && ctx.params.update.sessionUpdate === 'agent_message_chunk') spokeIdle = true
-    out(ctx.params as unknown as Record<string, unknown>)
+    out({ ...ctx.params, update: savedUpdate(ctx.params.update) } as unknown as Record<string, unknown>)
   })
   .connectWith(stream, async (ctx) => {
     const init = await ctx.request(acp.methods.agent.initialize, {
@@ -469,6 +529,7 @@ const result = await acp
       out({ relay: 'steered' })
       // Cleared here, not after: a resumed session's replayed history arrives before the first prompt.
       busy = true
+      sentPrompt = true
       spokeIdle = false
       const r = await ctx.request(acp.methods.agent.session.prompt, prompted(text)).catch((error: unknown) => fail(reason(error)))
       busy = false

@@ -8,11 +8,13 @@
 // option and mode, with its reason in the error's data, as testy and codex-acp do. FAKE_ASK asks permission to run a
 // command before it answers, then answers with the option the relay chose. FAKE_QUESTION (form or url) asks the person
 // one question before it answers, then answers with what came back; FAKE_QUESTION_URL is the link it asks to open;
-// FAKE_WITHDRAW withdraws the question ($/cancel_request) as soon as it is asked.
+// FAKE_WITHDRAW withdraws the question ($/cancel_request) as soon as it is asked. FAKE_IMAGE answers with an image,
+// and a resumed session replays one.
 import { appendFileSync } from 'node:fs'
 import { Readable, Writable } from 'node:stream'
 // The unstable schema, as codex-acp's: the stable one has no plan capability and drops it.
 import * as acp from '@agentclientprotocol/sdk/unstable'
+import { PNG } from './support/png.mts'
 
 const echo = process.env.FAKE_ECHO === '1'
 const log = (what: string) => process.env.FAKE_LOG && appendFileSync(process.env.FAKE_LOG, `${what}\n`)
@@ -44,7 +46,18 @@ await acp
   .onRequest(acp.methods.agent.initialize, (ctx) => {
     offered = ctx.params.clientCapabilities
     const sessionCapabilities = process.env.FAKE_CLOSE === '1' ? { close: {} } : {}
-    return { protocolVersion: ctx.params.protocolVersion, agentCapabilities: { promptCapabilities: { image: echo }, sessionCapabilities } }
+    return {
+      protocolVersion: ctx.params.protocolVersion,
+      agentCapabilities: { loadSession: true, promptCapabilities: { image: echo }, sessionCapabilities },
+    }
+  })
+  .onRequest(acp.methods.agent.session.load, async (ctx) => {
+    if (process.env.FAKE_IMAGE === '1')
+      await ctx.client.notify(acp.methods.client.session.update, {
+        sessionId: 's1',
+        update: { sessionUpdate: 'user_message_chunk', content: { type: 'image', mimeType: 'image/png', data: PNG } },
+      })
+    return {}
   })
   .onRequest(acp.methods.agent.session.new, () =>
     process.env.FAKE_OPTIONS ? { sessionId: 's1', configOptions: OPTIONS } : { sessionId: 's1' },
@@ -80,6 +93,13 @@ await acp
         release = resolve
       })
       return { stopReason: 'cancelled' }
+    }
+    if (process.env.FAKE_IMAGE === '1') {
+      await ctx.client.notify(acp.methods.client.session.update, {
+        sessionId: 's1',
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'image', mimeType: 'image/png', data: PNG } },
+      })
+      return { stopReason: 'end_turn' }
     }
     if (process.env.FAKE_QUESTION) {
       const withdraw = new AbortController()

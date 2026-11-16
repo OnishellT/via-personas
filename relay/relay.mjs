@@ -7,7 +7,8 @@ var __export = (target, all) => {
 
 // relay/src/relay.mts
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 
 // node_modules/.pnpm/@agentclientprotocol+sdk@2.6.0_zod@4.6.7/node_modules/@agentclientprotocol/sdk/dist/v1/unstable/schema/index.js
@@ -923,8 +924,8 @@ var _E = "captureStackTrace" in Error ? Error : null;
 function newError(Definition) {
   const E = _E;
   if (E) {
-    const saved = E.stackTraceLimit;
-    if (typeof saved === "number") {
+    const saved2 = E.stackTraceLimit;
+    if (typeof saved2 === "number") {
       try {
         E.stackTraceLimit = 0;
       } catch {
@@ -934,7 +935,7 @@ function newError(Definition) {
       try {
         return new Definition();
       } finally {
-        E.stackTraceLimit = saved;
+        E.stackTraceLimit = saved2;
       }
     }
   }
@@ -10258,6 +10259,7 @@ var out = (event) => process.stdout.write(`${JSON.stringify(event)}
 `);
 var agentPid;
 var busy = false;
+var sentPrompt = false;
 var spokeIdle = false;
 var fail = (message) => {
   out({ relay: "error", message });
@@ -10368,6 +10370,49 @@ var asked = /* @__PURE__ */ new Map();
 var asks = 0;
 var questions = /* @__PURE__ */ new Map();
 var CANCEL = { action: "cancel" };
+var files = process.env.RELAY_FILES;
+var EXTENSIONS = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "audio/wav": "wav",
+  "audio/mpeg": "mp3",
+  "audio/ogg": "ogg",
+  "application/pdf": "pdf"
+};
+var savedCount = 0;
+function saved(block) {
+  const bytes = block.type === "image" || block.type === "audio" ? block.data : block.type === "resource" && "blob" in block.resource ? block.resource.blob : "";
+  if (!files || !bytes || !sentPrompt) return block;
+  const mimeType = block.type === "resource" ? block.resource.mimeType : block.type === "image" || block.type === "audio" ? block.mimeType : void 0;
+  const data = Buffer.from(bytes, "base64");
+  const path = join(files, `${RUN}-${++savedCount}.${EXTENSIONS[mimeType ?? ""] ?? "bin"}`);
+  let relay;
+  try {
+    mkdirSync(files, { recursive: true, mode: 448 });
+    writeFileSync(path, data, { mode: 384 });
+    relay = { saved: path, size: data.length };
+  } catch (error2) {
+    relay = { notSaved: reason(error2), size: data.length };
+  }
+  const _meta = { ...block._meta, relay };
+  if (block.type === "resource" && "blob" in block.resource) return { ...block, resource: { ...block.resource, blob: "" }, _meta };
+  return block.type === "image" || block.type === "audio" ? { ...block, data: "", _meta } : block;
+}
+function savedUpdate(update) {
+  switch (update.sessionUpdate) {
+    case "agent_message_chunk":
+    case "agent_thought_chunk":
+    case "user_message_chunk":
+      return { ...update, content: saved(update.content) };
+    case "tool_call":
+    case "tool_call_update":
+      return update.content ? { ...update, content: update.content.map((c) => c.type === "content" ? { ...c, content: saved(c.content) } : c) } : update;
+    default:
+      return update;
+  }
+}
 var closeQuestion = (id) => {
   const answerIt = questions.get(id);
   if (answerIt === void 0) return;
@@ -10432,7 +10477,7 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
   });
 }).onNotification(methods.client.session.update, (ctx) => {
   if (!busy && ctx.params.update.sessionUpdate === "agent_message_chunk") spokeIdle = true;
-  out(ctx.params);
+  out({ ...ctx.params, update: savedUpdate(ctx.params.update) });
 }).connectWith(stream, async (ctx) => {
   const init = await ctx.request(methods.agent.initialize, {
     protocolVersion: PROTOCOL_VERSION,
@@ -10603,6 +10648,7 @@ ${text2}`;
     const text = queue.shift();
     out({ relay: "steered" });
     busy = true;
+    sentPrompt = true;
     spokeIdle = false;
     const r = await ctx.request(methods.agent.session.prompt, prompted(text)).catch((error2) => fail(reason(error2)));
     busy = false;

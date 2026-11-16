@@ -49,6 +49,7 @@ export type Adapter = {
     agentId: string
     root: string
     inbox?: string
+    files?: string // where the relay saves what the agent sends as bytes (an image, audio)
     guard?: Readonly<Record<string, string>>
     mode: Mode
     installed?: string

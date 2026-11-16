@@ -158,7 +158,18 @@ export async function* run(
   $: Pick<EngineInterface, 'process' | 'clock' | 'plugin' | 'fs' | 'env' | 'ui'>,
   { agentId, choice, prompt, signal, inbox, session, block = 0, guard, mode, installed, models = [], probe, save }: RunInput,
 ): AsyncGenerator<TurnStepChunk | Mark, RunResult> {
-  const request = adapter.start({ choice, prompt, session, agentId, root: $.plugin.root, inbox: inbox?.path, guard, mode, installed })
+  const request = adapter.start({
+    choice,
+    prompt,
+    session,
+    agentId,
+    root: $.plugin.root,
+    inbox: inbox?.path,
+    files: inbox?.files,
+    guard,
+    mode,
+    installed,
+  })
   const s: RunState = {
     writer: new StepWriter(block),
     latest: session,

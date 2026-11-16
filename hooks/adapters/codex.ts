@@ -91,7 +91,7 @@ export const codex = {
       }
     },
   },
-  start: ({ choice, prompt, session, root, inbox, guard, mode, installed }) => {
+  start: ({ choice, prompt, session, root, inbox, files, guard, mode, installed }) => {
     const readOnly = codexMode(choice, mode).agentMode === 'read-only'
     // Fail closed: without the guard, MCP servers would run outside the read-only sandbox.
     if (readOnly && guard === undefined) throw new Error('codex cannot prove read-only without its MCP guard')
@@ -102,6 +102,7 @@ export const codex = {
       readOnly: choice.tools === 'read',
       mode,
       inbox,
+      files,
       session,
       model: choice.model,
       thinking: choice.thinking,
@@ -110,7 +111,7 @@ export const codex = {
       ...(readOnly ? { env: guard } : {}),
     })
   },
-  events: () => relayEvents(),
+  events: () => relayEvents('codex'),
   // The relay names the model the session runs on.
   model: () => undefined,
   failure: (_exit, stderr) =>

@@ -58,15 +58,46 @@ export function diffOf(path: string, oldText: string, newText: string): string {
   return diffRows(path, [...before.slice(start, endBefore).map((l) => `- ${l}`), ...after.slice(start, endAfter).map((l) => `+ ${l}`)])
 }
 
+const sized = (bytes: number) =>
+  bytes < 1024 ? `${bytes} bytes` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+
+// A content block as text, in Claude Code's own words for an MCP tool's blocks: what the agent sent as bytes
+// (an image, audio, a binary resource) by the file the relay saved it to, which Claude can open; a resource by
+// its text, a link by its address. `from` names the agent, as Claude Code names the server.
+export function blockText(block: unknown, from: string): string {
+  if (!isRecord(block)) return ''
+  if (block.type === 'text') return typeof block.text === 'string' ? block.text : ''
+  if (block.type === 'resource_link') {
+    const link = `[Resource link: ${String(block.name ?? '')}] ${String(block.uri ?? '')}`
+    return typeof block.description === 'string' && block.description ? `${link} (${block.description})` : link
+  }
+  const resource = block.type === 'resource' && isRecord(block.resource) ? block.resource : undefined
+  if (resource && typeof resource.text === 'string') return `[Resource from ${from} at ${String(resource.uri ?? '')}] ${resource.text}`
+  const lead =
+    block.type === 'image'
+      ? `[Image from ${from}] `
+      : block.type === 'audio'
+        ? `[Audio from ${from}] `
+        : resource
+          ? `[Resource from ${from} at ${String(resource.uri ?? '')}] `
+          : undefined
+  if (lead === undefined) return ''
+  const mimeType = String((resource ?? block).mimeType ?? '') || 'unknown type'
+  const relay = isRecord(block._meta) && isRecord(block._meta.relay) ? block._meta.relay : {}
+  const size = typeof relay.size === 'number' ? relay.size : Math.floor((String(resource ? resource.blob : block.data).length * 3) / 4)
+  if (typeof relay.saved === 'string') return `${lead}Binary content (${mimeType}, ${sized(size)}) saved to ${relay.saved}`
+  const why = typeof relay.notSaved === 'string' ? relay.notSaved : 'the relay saves no files'
+  return `${lead}Binary content (${mimeType}, ${size} bytes) could not be saved to disk: ${why}`
+}
+
 // What a finished tool call returned, as the agent reported it: its text content, a diff of each file
 // it edited, or its raw output. An exit code alone is not output (codex-acp reports one there): the
 // parser keeps it apart. Kept short: it lands in the subagent's transcript.
-function outputOf(u: { readonly content?: unknown; readonly rawOutput?: unknown }, cwd: string): string {
+function outputOf(u: { readonly content?: unknown; readonly rawOutput?: unknown }, cwd: string, from: string): string {
   const parts: string[] = []
   for (const item of Array.isArray(u.content) ? u.content.filter(isRecord) : []) {
     // Typed, but still an agent's JSON: a content item can come without its content.
-    if (item.type === 'content' && isRecord(item.content) && item.content.type === 'text' && typeof item.content.text === 'string')
-      parts.push(item.content.text)
+    if (item.type === 'content' && blockText(item.content, from)) parts.push(blockText(item.content, from))
     else if (item.type === 'diff' && typeof item.path === 'string' && typeof item.newText === 'string')
       parts.push(diffOf(relative(item.path, cwd), typeof item.oldText === 'string' ? item.oldText : '', item.newText))
   }
@@ -144,7 +175,7 @@ function question(e: Record<string, unknown>): Question | undefined {
 
 // One session's updates: the harness's own, or one of its subagents' (ACP's subagents RFD), each with its
 // own calls, messages and context.
-function sessionEvents(cwdOf: () => string) {
+function sessionEvents(cwdOf: () => string, from: string) {
   let context = 0
   let speaking: unknown
   const shown = new Set<string>()
@@ -162,8 +193,10 @@ function sessionEvents(cwdOf: () => string) {
     const cwd = cwdOf()
     switch (u.sessionUpdate) {
       case 'agent_message_chunk': {
+        // A block that is not text stands on its own lines, as Claude Code sets an MCP tool's blocks apart.
         const content = u.content
-        const text = isRecord(content) && content.type === 'text' && typeof content.text === 'string' ? content.text : ''
+        const block = blockText(content, from)
+        const text = isRecord(content) && content.type !== 'text' && block ? `\n${block}\n` : block
         if (!text) return []
         // Each message is a new one; only the last is the answer.
         const out: Norm[] = []
@@ -197,7 +230,7 @@ function sessionEvents(cwdOf: () => string) {
         const raw = isRecord(u.rawOutput) ? (u.rawOutput as Record<string, unknown>).exit_code : undefined
         const exit = isRecord(meta.terminal_exit) ? meta.terminal_exit.exit_code : raw
         if (typeof exit === 'number') exits.set(id, exit)
-        const now = Array.isArray(u.content) && u.content.length > 0 ? outputOf(u, cwd) : ''
+        const now = Array.isArray(u.content) && u.content.length > 0 ? outputOf(u, cwd, from) : ''
         if (now) reported.set(id, now)
         const path = paths.get(id)
         const call = (): Norm => ({
@@ -222,7 +255,7 @@ function sessionEvents(cwdOf: () => string) {
           if (!ended.has(id)) {
             ended.add(id)
             const code = exits.get(id)
-            const said = outputOf(u, cwd) || reported.get(id) || (printed.get(id) ?? '').trim()
+            const said = outputOf(u, cwd, from) || reported.get(id) || (printed.get(id) ?? '').trim()
             const output = code && !said.includes(`exit code ${code}`) ? `${said}${said ? '\n' : ''}exit code ${code}` : said
             out.push({ k: 'called', id, output, failed: u.status === 'failed' })
           }
@@ -296,11 +329,12 @@ const SHOWN: ReadonlySet<string> = new Set(['message', 'text', 'thinking', 'plan
 
 // A parser per run. Updates before the first prompt are a resumed session's history, replayed by
 // session/load: never part of this answer.
-export function relayEvents(): (line: string) => Norm[] {
+// from: the agent's name, as its blocks are labelled ("[Image from codex]").
+export function relayEvents(from = 'the agent'): (line: string) => Norm[] {
   let live = false
   let cwd = ''
   let root: string | undefined
-  const own = sessionEvents(() => cwd)
+  const own = sessionEvents(() => cwd, from)
   const children = new Map<string, ReturnType<typeof sessionEvents>>()
   return (line) => {
     let e: unknown
@@ -390,7 +424,7 @@ export function relayEvents(): (line: string) => Norm[] {
     }
     let child = children.get(session)
     if (child === undefined) {
-      child = sessionEvents(() => cwd)
+      child = sessionEvents(() => cwd, from)
       children.set(session, child)
     }
     return child.read(u).flatMap((norm): Norm[] => (SHOWN.has(norm.k) ? [{ k: 'of', child: session, norm }] : []))

@@ -202,6 +202,7 @@ test('a codex agent runs codex-acp behind the relay, with its prompt on stdin', 
     RELAY_AGENT_MODE: 'workspace-write',
     CODEX_PATH: 'codex',
     RELAY_INBOX: '/home/u/.claude/via/inbox/codex-a1.jsonl',
+    RELAY_FILES: '/home/u/.claude/via/files/codex-a1',
     RELAY_STEER: 'steering',
   })
 })
@@ -471,6 +472,44 @@ test('a dismissed or unanswered question is a deny', async ($, on) => {
   await runTurn($)
   const inbox = writes.filter((w) => w.path.endsWith('/inbox/codex-a1.jsonl')).flatMap((w) => w.text.split('\n'))
   expect(inbox).toContain(JSON.stringify({ answer: '7-k1-1', optionId: 'abort' }))
+})
+
+// What codex sends that isn't text, as Claude reads it: in Claude Code's own words for an MCP tool's blocks,
+// the bytes by the file the relay saved them to.
+test("codex's image, resource and link reach the answer as Claude Code words them, the image by its saved file", async ($, on) => {
+  const block = (content: object) => ({ sessionId: SID, update: { content, messageId: 'msg_c', sessionUpdate: 'agent_message_chunk' } })
+  const saved = { relay: { saved: '/home/u/.claude/via/files/codex-a1/1-1.png', size: 2048 } }
+  const shot = {
+    sessionId: SID,
+    update: {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'call_v',
+      status: 'completed',
+      content: [{ type: 'content', content: { type: 'image', mimeType: 'image/png', data: '', _meta: saved } }],
+    },
+  }
+  const events = [
+    ...CAPTURED.slice(0, 3),
+    {
+      sessionId: SID,
+      update: { sessionUpdate: 'tool_call', toolCallId: 'call_v', title: 'View screenshot', kind: 'read', status: 'in_progress' },
+    },
+    shot,
+    block({ type: 'text', text: 'Here:' }),
+    block({ type: 'image', mimeType: 'image/png', data: '', _meta: saved }),
+    block({ type: 'resource', resource: { uri: 'file:///w/notes.md', text: 'the notes' } }),
+    block({ type: 'resource_link', uri: 'file:///w/report.pdf', name: 'report.pdf', description: 'the report' }),
+    ...CAPTURED.slice(-2),
+  ]
+  arrange(on, [], { stdout: lines(events) })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
+  const { calls, result } = await runTurn($)
+  const image = '[Image from codex] Binary content (image/png, 2.0 KB) saved to /home/u/.claude/via/files/codex-a1/1-1.png'
+  expect(result.answer).toContain(`Here:\n${image}\n`)
+  expect(result.answer).toContain('[Resource from codex at file:///w/notes.md] the notes')
+  expect(result.answer).toContain('[Resource link: report.pdf] file:///w/report.pdf (the report)')
+  // A tool's image, in its row.
+  expect(calls).toContainEqual({ result: image })
 })
 
 const QUESTION = {

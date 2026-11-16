@@ -3,7 +3,7 @@
 // coverage of a client, so this is where the relay meets updates the harnesses rarely send. Skipped without testy.
 
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -64,6 +64,29 @@ test("session_updates: every kind of update testy sends reaches the relay's outp
   for (const kind of sent) assert.ok(kinds.has(kind), `no ${kind} reached the relay's output`)
   const blocks = new Set(updates(r.events).flatMap((u) => (u.sessionUpdate === 'agent_message_chunk' ? [u.content.type] : [])))
   assert.deepEqual([...blocks].sort(), ['audio', 'image', 'resource', 'resource_link', 'text'])
+})
+
+test('session_updates: each block testy sends as bytes is saved to RELAY_FILES, the file holding exactly its bytes', { skip }, async () => {
+  const bytesOf = (events: Parameters<typeof updates>[0]) =>
+    updates(events).flatMap((u) => {
+      if (u.sessionUpdate !== 'agent_message_chunk') return []
+      const c = u.content
+      if (c.type === 'image' || c.type === 'audio') return [{ data: c.data, meta: c._meta }]
+      return c.type === 'resource' && 'blob' in c.resource ? [{ data: c.resource.blob, meta: c._meta }] : []
+    })
+  const sent = bytesOf((await run('session_updates')).events)
+  assert.ok(sent.length >= 2, 'testy sent no bytes')
+  const files = join(sandbox().root, 'files')
+  const r = await run('session_updates', { RELAY_FILES: files })
+  assert.equal(r.status, 0, r.stderr)
+  const printed = bytesOf(r.events)
+  assert.equal(printed.length, sent.length)
+  for (const [i, block] of printed.entries()) {
+    assert.equal(block.data, '')
+    const saved = String(get(block.meta, 'relay', 'saved'))
+    assert.ok(saved.startsWith(`${files}/`), saved)
+    assert.deepEqual(readFileSync(saved), Buffer.from(sent[i]?.data ?? '', 'base64'))
+  }
 })
 
 test("tool_calls: each call reaches the output through its lifecycle, its paths in the session's folder", { skip }, async () => {

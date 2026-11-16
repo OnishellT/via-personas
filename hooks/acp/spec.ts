@@ -14,6 +14,7 @@ const relayArgv = (root: string, agent: readonly string[]) => ['node', `${root}/
 // steer: how the agent takes a message mid-run, tested live on each (relay/checks/check.sh).
 function relayEnv(c: {
   inbox?: string
+  files?: string
   steer: 'steering' | 'prompt'
   session?: string
   model?: string
@@ -25,6 +26,7 @@ function relayEnv(c: {
   return {
     RELAY_POLICY: c.policy,
     ...(c.inbox ? { RELAY_INBOX: c.inbox, RELAY_STEER: c.steer } : {}),
+    ...(c.files ? { RELAY_FILES: c.files } : {}),
     ...(c.session ? { RELAY_SESSION: c.session } : {}),
     ...(c.model ? { RELAY_MODEL: c.model } : {}),
     ...(c.agentMode ? { RELAY_AGENT_MODE: c.agentMode } : {}),
@@ -55,6 +57,7 @@ export type AcpRun = {
   readonly readOnly: boolean
   readonly mode: Mode
   readonly inbox?: string
+  readonly files?: string // where the relay saves what the agent sends as bytes
   readonly session?: string
   readonly model?: string
   readonly thinking?: string
@@ -79,6 +82,7 @@ export function acpStart(spec: AcpSpec, run: AcpRun): ProcessSpawnRequest {
     env: {
       ...relayEnv({
         inbox: run.inbox,
+        files: run.files,
         steer: spec.steer,
         session: run.session,
         model: run.model,

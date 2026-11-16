@@ -64,7 +64,7 @@ export const opencode = {
     harmless: ['bin', '.gitignore'],
     why: 'opencode loads plugins, tools and config from .opencode on every run, before any permission applies',
   },
-  start: ({ choice, prompt, session, root, inbox, mode, agentId }) => {
+  start: ({ choice, prompt, session, root, inbox, files, mode, agentId }) => {
     const run = opencodeRun(choice, mode, agentId)
     // The read agent replaces the person's own OPENCODE_CONFIG_CONTENT for a read-only run.
     const injected: Record<string, string> = run.agent
@@ -76,6 +76,7 @@ export const opencode = {
       readOnly: choice.tools === 'read',
       mode,
       inbox,
+      files,
       session,
       model: choice.model,
       thinking: choice.thinking,
@@ -83,7 +84,7 @@ export const opencode = {
       ...(run.agent ? { config: { mode: run.agent }, env: { ...injected, OPENCODE_DISABLE_PROJECT_CONFIG: '1' } } : {}),
     })
   },
-  events: () => relayEvents(),
+  events: () => relayEvents('opencode'),
   // The relay names the model the session runs on.
   model: () => undefined,
   failure: (_exit, stderr) =>
