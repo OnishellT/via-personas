@@ -60,3 +60,36 @@ jobs:
             echo "$residue"
             exit 1
           fi
+
+  # The real codex-acp and opencode behind the real relay, the model a local fake: no tokens, no network, no
+  # login (relay/test/real-*.test.mjs). Elsewhere those tests skip, as the harnesses aren't installed. The
+  # versions are the ones via is tested with: bump them with relay/codex-acp's lock.
+  harnesses:
+    runs-on: ubuntu-latest
+    env:
+      CODEX_VERSION: 0.167.2
+      OPENCODE_VERSION: 2.2.7
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - name: Install Codex, OpenCode and the locked codex-acp
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm install -g "@openai/codex@$CODEX_VERSION"
+          gh release download "v$OPENCODE_VERSION" -R anomalyco/opencode -p opencode-linux-x64.tar.gz -D "$RUNNER_TEMP/opencode"
+          tar -xzf "$RUNNER_TEMP/opencode/opencode-linux-x64.tar.gz" -C "$RUNNER_TEMP/opencode"
+          echo "$RUNNER_TEMP/opencode" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/codex-acp"
+          cp relay/codex-acp/package.json relay/codex-acp/package-lock.json "$RUNNER_TEMP/codex-acp/"
+          (cd "$RUNNER_TEMP/codex-acp" && npm ci --ignore-scripts --omit=optional --no-audit --no-fund)
+          echo "CODEX_ACP=$RUNNER_TEMP/codex-acp/node_modules/@agentclientprotocol/codex-acp/dist/index.js" >> "$GITHUB_ENV"
+      - name: Relay tests, none skipped
+        run: |
+          set -o pipefail
+          codex --version && opencode --version
+          npx -y pnpm@12.15.0 install --frozen-lockfile
+          npx -y pnpm@12.15.0 test:relay | tee "$RUNNER_TEMP/relay.log"
+          grep -q '^ℹ skipped 0$' "$RUNNER_TEMP/relay.log" || { echo "::error::a real-harness test skipped"; exit 1; }
