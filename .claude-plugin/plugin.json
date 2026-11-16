@@ -6,6 +6,9 @@
     "name": "Sean Floyd"
   },
   "license": "MIT",
+  "engines": {
+    "claude-code": ">=2.1.323"
+  },
   "types": "./types/index.d.ts",
   "userConfig": {
     "defaultModel": {
