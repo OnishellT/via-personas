@@ -6,19 +6,23 @@ import type { World } from '../hooks/world'
 type TestDollar = Parameters<TestBody>[0]
 type TestOn = Parameters<TestBody>[1]
 
-// An agent as agent.list lists it, running: its other fields as Claude Code fills them for a new one.
-export const agentInfo = (agent: Pick<AgentInfo, 'id' | 'description' | 'type'>): AgentInfo => ({
-  status: 'running',
-  kind: 'local_agent',
-  taskStatus: 'running',
-  label: agent.description,
-  startTime: 0,
-  cwd: '/repo',
-  tokenCount: 0,
-  tokenSamples: [],
-  hasRow: true,
-  ...agent,
-})
+// An agent as agent.list lists it, running: its other fields as Claude Code fills them for a new one. Built
+// apart, then returned: Claude Code 2.1.326 requires these fields, and 2.1.325 (CI's) has none of them.
+export const agentInfo = (agent: Pick<AgentInfo, 'id' | 'description' | 'type'>): AgentInfo => {
+  const info = {
+    status: 'running' as const,
+    kind: 'local_agent' as const,
+    taskStatus: 'running' as const,
+    label: agent.description,
+    startTime: 0,
+    cwd: '/repo',
+    tokenCount: 0,
+    tokenSamples: [],
+    hasRow: true,
+    ...agent,
+  }
+  return info
+}
 export const STEP = { turnId: 't1', index: 0, model: 'haiku', messageCount: 1, agentId: 'a1' }
 export const ROOT = new URL('..', (import.meta as ImportMeta & { url: string }).url).pathname.replace(/\/$/, '')
 export const STUB = {
