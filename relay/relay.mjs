@@ -10339,8 +10339,14 @@ agentPid = agent.pid;
 agent.on("error", (error2) => fail(`could not start ${bin}: ${error2.message}`));
 var cancel = async () => {
 };
+var close = async () => {
+};
 var stop = async (code) => {
-  await Promise.race([cancel(), new Promise((resolve) => setTimeout(resolve, 2e3))]);
+  const ended = async () => {
+    await cancel();
+    await close();
+  };
+  await Promise.race([ended(), new Promise((resolve) => setTimeout(resolve, 2e3))]);
   try {
     if (agent.pid !== void 0) process.kill(-agent.pid, "SIGTERM");
   } catch {
@@ -10408,6 +10414,11 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
     await ctx.notify(methods.agent.session.cancel, { sessionId });
     await new Promise((resolve) => setTimeout(resolve, 500));
   };
+  if (init.agentCapabilities?.sessionCapabilities?.close)
+    close = async () => {
+      await ctx.request(methods.agent.session.close, { sessionId }).catch(() => {
+      });
+    };
   const modeId = process.env.RELAY_AGENT_MODE;
   if (modeId)
     await ctx.request(methods.agent.session.setMode, { sessionId, modeId }).catch((error2) => fail(`the agent refused mode ${modeId}: ${String(error2?.message ?? error2)}`));
@@ -10527,6 +10538,9 @@ ${text2}`;
       interrupt = void 0;
     }
   }
+  await Promise.race([close(), new Promise((resolve) => setTimeout(resolve, 2e3))]);
+  close = async () => {
+  };
   return last;
 });
 out({ relay: "done", stopReason: result?.stopReason ?? null });

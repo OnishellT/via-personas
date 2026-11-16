@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -93,4 +93,37 @@ test('a symlink or .. that leads out of the working folder stays text, and at mo
     return path
   })
   assert.equal(said(`See ${many.join(' ')}`, dir).blocks.length, 1 + 4)
+})
+
+const logged = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean) : [])
+
+test('a run that ends closes its session when the agent can close one, and only then', () => {
+  for (const close of ['1', '']) {
+    const log = join(mkdtempSync(join(tmpdir(), 'relay-')), 'log')
+    const run = spawnSync('node', [relay, '--', 'node', agent], {
+      input: 'hi',
+      encoding: 'utf8',
+      timeout: 20_000,
+      env: { ...process.env, FAKE_ECHO: '1', FAKE_CLOSE: close, FAKE_LOG: log },
+    })
+    assert.equal(run.status, 0)
+    assert.deepEqual(logged(log), close ? ['close'] : [])
+  }
+})
+
+// The agent keeps its turn past the cancel, so the run never reaches its own end: the close is the stop's.
+test('a stopped run cancels the turn, then closes the session, before the kill', async () => {
+  const log = join(mkdtempSync(join(tmpdir(), 'relay-')), 'log')
+  const run = spawn('node', [relay, '--', 'node', agent], {
+    env: { ...process.env, FAKE_CLOSE: '1', FAKE_HANG: 'stubborn', FAKE_LOG: log },
+  })
+  let stdout = ''
+  run.stdout.on('data', (data) => (stdout += data))
+  run.stdin.end('hi')
+  const deadline = Date.now() + 10_000
+  while (!logged(log).includes('prompt') && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50))
+  run.kill('SIGTERM')
+  await new Promise((resolve) => run.on('exit', resolve))
+  assert.deepEqual(logged(log), ['prompt', 'cancel', 'close'])
+  assert.equal(stdout.includes('"relay":"done"'), false)
 })

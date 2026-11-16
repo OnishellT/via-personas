@@ -139,8 +139,15 @@ agent.on('error', (error) => fail(`could not start ${bin}: ${error.message}`))
 // Set once a session exists. Cancelling ends the agent's running tool, which a kill does not: opencode
 // runs commands in their own process group, so a group kill left a `sleep` running.
 let cancel = async () => {}
+// Set once a session exists, for an agent that can close one: closing ends what the session started that
+// a cancel and the kill leave running, such as Codex's background terminals.
+let close = async () => {}
 const stop = async (code: number) => {
-  await Promise.race([cancel(), new Promise((resolve) => setTimeout(resolve, 2000))])
+  const ended = async () => {
+    await cancel()
+    await close()
+  }
+  await Promise.race([ended(), new Promise((resolve) => setTimeout(resolve, 2000))])
   try {
     if (agent.pid !== undefined) process.kill(-agent.pid, 'SIGTERM')
   } catch {
@@ -225,6 +232,10 @@ const result = await acp
       // A moment for the agent to abort its tool before the kill.
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
+    if (init.agentCapabilities?.sessionCapabilities?.close)
+      close = async () => {
+        await ctx.request(acp.methods.agent.session.close, { sessionId }).catch(() => {})
+      }
 
     const modeId = process.env.RELAY_AGENT_MODE
     if (modeId)
@@ -366,6 +377,9 @@ const result = await acp
         interrupt = undefined
       }
     }
+    // Here, not in stop(): the connection closes when this callback returns.
+    await Promise.race([close(), new Promise((resolve) => setTimeout(resolve, 2000))])
+    close = async () => {}
     return last
   })
 
