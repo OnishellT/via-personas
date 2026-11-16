@@ -1,5 +1,5 @@
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
-import { agentStore, NODE, run, runTurn, STEP } from './helpers'
+import { agentInfo, agentStore, NODE, run, runTurn, STEP } from './helpers'
 
 type On = Parameters<TestBody>[1]
 
@@ -70,7 +70,7 @@ function arrange(on: On, lines: readonly unknown[]) {
   mock.clock(on)
   mock.env(on, { HOME: '/home/u' })
   agentStore(on, { a1: { harness: 'codex' } })
-  on('agent.list', () => ({ value: [{ id: 'a1', description: 'parent', type: 'via:codex', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'via:codex' })] }))
   on('session.messages', () => ({ value: [] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } }))

@@ -5,6 +5,7 @@ import { pi } from '../hooks/adapters/pi'
 import { turnStep } from '../hooks/turn'
 import type { World } from '../hooks/world'
 import {
+  agentInfo,
   agentStore,
   arrange,
   bottom,
@@ -336,7 +337,7 @@ test('a spawn keeps its harness in the store, and parallel spawns keep each othe
 test("a step from an agent the old process spawned is still via's, not passed to Claude", async ($, on) => {
   mock.env(on, ENV)
   node(on)
-  on('agent.list', () => ({ value: [{ id: 'a1', description: 'x', type: 'general-purpose', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'general-purpose' })] }))
   agentStore(on, { a1: { harness: 'pi', handback: true } })
   on('session.messages', () => ({ value: [] }))
   let passed = false
@@ -597,7 +598,7 @@ test('an agent that is not a via agent is looked up once, not on every step', as
   let lists = 0
   on('agent.list', () => {
     lists += 1
-    return { value: [{ id: 'x1', description: 'x', type: 'Explore', status: 'running' }] }
+    return { value: [agentInfo({ id: 'x1', description: 'x', type: 'Explore' })] }
   })
   // biome-ignore lint/correctness/useYield: a streaming hook must be an async generator, even one that answers at once
   on('turn.step', async function* () {
@@ -751,7 +752,7 @@ test('an agent via has no record of runs read-only, and its made-up record is ne
   mock.env(on, ENV)
   node(on)
   const store = agentStore(on)
-  on('agent.list', () => ({ value: [{ id: 'a1', description: 'x', type: 'via:pi', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'via:pi' })] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('session.messages', () => ({ value: [] }))
   on('fs.write', () => ({ value: undefined }))
@@ -771,7 +772,7 @@ test('a refusal for an agent via has no record of says why it runs read-only, no
   mock.env(on, ENV)
   node(on)
   agentStore(on)
-  on('agent.list', () => ({ value: [{ id: 'a1', description: 'x', type: 'via:agy', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'via:agy' })] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('session.messages', () => ({ value: [] }))
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
@@ -784,7 +785,7 @@ test('a refusal for an agent via has no record of says why it runs read-only, no
 test("a via agent's plan is a row each time it changes, its entries the row's output", async ($, on) => {
   mock.env(on, { HOME: '/home/u' })
   agentStore(on, { a1: { harness: 'codex' } })
-  on('agent.list', () => ({ value: [{ id: 'a1', description: 'parent', type: 'via:codex', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'via:codex' })] }))
   on('session.messages', () => ({ value: [] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } }))

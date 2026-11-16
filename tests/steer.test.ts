@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { arrange, bottom, ENV, hang, hold, lines, node, run, type Spawn, split, type Write } from './helpers'
+import { agentInfo, arrange, bottom, ENV, hang, hold, lines, node, run, type Spawn, split, type Write } from './helpers'
 
 test('a SendMessage to a live pi agent is steered into its inbox', async ($, on) => {
   const clock = mock.clock(on)
@@ -230,7 +230,7 @@ test('an interrupt: message aborts the running pi step, then runs on the same se
   const spawns: Spawn[] = []
   const writes: Write[] = []
   mock.env(on, ENV)
-  on('agent.list', () => ({ value: [{ id: 'a1', description: 'x', type: 'via:pi', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'via:pi' })] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_, e, next) => next(e))
   on('session.messages', () => ({ value: [] }))

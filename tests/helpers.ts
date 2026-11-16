@@ -1,4 +1,4 @@
-import type { SessionMessage, TurnStepChunk } from 'claude-code'
+import type { AgentInfo, SessionMessage, TurnStepChunk } from 'claude-code'
 import { expect, mock, type TestBody } from 'claude-code/testing'
 import type { AgentRecord } from '../hooks/record'
 import type { World } from '../hooks/world'
@@ -6,6 +6,19 @@ import type { World } from '../hooks/world'
 type TestDollar = Parameters<TestBody>[0]
 type TestOn = Parameters<TestBody>[1]
 
+// An agent as agent.list lists it, running: its other fields as Claude Code fills them for a new one.
+export const agentInfo = (agent: Pick<AgentInfo, 'id' | 'description' | 'type'>): AgentInfo => ({
+  status: 'running',
+  kind: 'local_agent',
+  taskStatus: 'running',
+  label: agent.description,
+  startTime: 0,
+  cwd: '/repo',
+  tokenCount: 0,
+  tokenSamples: [],
+  hasRow: true,
+  ...agent,
+})
 export const STEP = { turnId: 't1', index: 0, model: 'haiku', messageCount: 1, agentId: 'a1' }
 export const ROOT = new URL('..', (import.meta as ImportMeta & { url: string }).url).pathname.replace(/\/$/, '')
 export const STUB = {
@@ -19,7 +32,7 @@ export const STUB = {
 } as const
 export type Spawn = { argv: string[]; input: string | undefined; env?: Record<string, string> }
 export type Write = { path: string; text: string }
-const AGENT = { id: 'a1', description: 'x', type: 'via:pi', status: 'running' } as const
+const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'via:pi' })
 const EVENTS = [
   { type: 'message_start', message: { role: 'assistant', provider: 'openrouter', model: 'kimi' } },
   { type: 'tool_execution_start', toolName: 'bash', args: { command: 'ls' } },

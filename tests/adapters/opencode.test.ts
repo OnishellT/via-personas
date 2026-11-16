@@ -2,7 +2,7 @@ import { expect, mock, type TestBody, test } from 'claude-code/testing'
 import { relayEvents } from '../../hooks/acp/events'
 import { opencode, opencodeRun } from '../../hooks/adapters/opencode'
 import { run as runHook } from '../../hooks/run'
-import { agentStore, ROOT, run, runTurn, STEP, testWorld } from '../helpers'
+import { agentInfo, agentStore, ROOT, run, runTurn, STEP, testWorld } from '../helpers'
 
 type TestOn = Parameters<TestBody>[1]
 type Spawn = { argv: string[]; input: string | undefined; env?: Record<string, string> }
@@ -45,7 +45,7 @@ const CAPTURED = [
   { relay: 'done', stopReason: 'end_turn' },
 ]
 const lines = (events: unknown[]) => `${events.map((e) => JSON.stringify(e)).join('\n')}\n`
-const AGENT = { id: 'a1', description: 'x', type: 'via:opencode', status: 'running' } as const
+const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'via:opencode' })
 
 function arrange(
   on: TestOn,

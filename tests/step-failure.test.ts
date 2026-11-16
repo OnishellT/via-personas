@@ -1,5 +1,5 @@
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
-import { agentStore, NODE, run, runTurn, STEP } from './helpers'
+import { agentInfo, agentStore, NODE, run, runTurn, STEP } from './helpers'
 
 type On = Parameters<TestBody>[1]
 
@@ -45,7 +45,7 @@ async function nestedChild(
   mock.env(on, { HOME: '/home/u' })
   // The record the parent's spawn left.
   const store = agentStore(on, { a1: { harness: 'codex' } })
-  on('agent.list', () => ({ value: [{ id: 'a1', description: 'parent', type: 'via:codex', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'via:codex' })] }))
   // A refused transcript read throws inside via's step: any throw there does the same.
   on('session.messages', (_, e) => (refused === 'transcript' && e.agentId === 'n1' ? { deny: 'transcript unavailable' } : { value: [] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
@@ -162,7 +162,7 @@ test("a nested agent's spawn and answer are kept for a new process", async ($, o
 // spawn and no parent run: its saved answer, or the cut-off, and never a request to the model.
 function newProcess(on: On, report?: string, handback?: { handedBack: boolean }) {
   mock.env(on, { HOME: '/home/u' })
-  on('agent.list', () => ({ value: [{ id: 'n1', description: 'List acp', type: 'general-purpose', status: 'running' }] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'n1', description: 'List acp', type: 'general-purpose' })] }))
   agentStore(on, {
     n1: {
       harness: 'codex',
