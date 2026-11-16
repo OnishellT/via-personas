@@ -5,7 +5,8 @@
 // FAKE_CLOSE advertises session/close; FAKE_HANG holds the prompt until a cancel, or with `stubborn` past
 // it; FAKE_LOG names a file each cancel and close is written to. FAKE_OPTIONS offers config options, as
 // codex-acp does: a model and its reasoning efforts; each set one is logged. FAKE_REFUSE refuses every config
-// option and mode, with its reason in the error's data, as testy and codex-acp do.
+// option and mode, with its reason in the error's data, as testy and codex-acp do. FAKE_ASK asks permission to run a
+// command before it answers, then answers with the option the relay chose.
 import { appendFileSync } from 'node:fs'
 import { Readable, Writable } from 'node:stream'
 // The unstable schema, as codex-acp's: the stable one has no plan capability and drops it.
@@ -75,6 +76,22 @@ await acp
         release = resolve
       })
       return { stopReason: 'cancelled' }
+    }
+    if (process.env.FAKE_ASK === '1') {
+      const asked = await ctx.client.request(acp.methods.client.session.requestPermission, {
+        sessionId: 's1',
+        toolCall: { toolCallId: 'ask-1', title: 'rm -rf build', kind: 'execute', status: 'pending' },
+        options: [
+          { optionId: 'allow_once', name: 'Allow', kind: 'allow_once' },
+          { optionId: 'reject_once', name: 'Deny', kind: 'reject_once' },
+        ],
+      })
+      const chose = asked.outcome.outcome === 'selected' ? asked.outcome.optionId : 'cancelled'
+      await ctx.client.notify(acp.methods.client.session.update, {
+        sessionId: 's1',
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `chose ${chose}` } },
+      })
+      return { stopReason: 'end_turn' }
     }
     if (!echo) throw acp.RequestError.internalError({ details: "You've hit your usage limit. Try again at 10:04 PM." })
     const blocks = ctx.params.prompt.map((b) => (b.type === 'image' ? `image:${b.mimeType}:${b.data.length}` : b.type))

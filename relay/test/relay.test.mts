@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFi
 import { join } from 'node:path'
 import { test } from 'node:test'
 import type { ClientCapabilities } from '@agentclientprotocol/sdk/unstable'
-import { answer, get, type Printed, relayEvent, runRelay, sandbox, startRelay, updates } from './support/relay-run.mts'
+import { answer, get, type Printed, relayEvent, runRelay, sandbox, send, startRelay, updates } from './support/relay-run.mts'
 
 const agent = ['node', new URL('./fake-agent.mts', import.meta.url).pathname]
 
@@ -171,4 +171,30 @@ test("a refused model, mode or config option keeps the agent's reason, not only 
     await refused({ RELAY_CONFIG: JSON.stringify({ reasoning_effort: 'high' }) }),
     'the agent refused reasoning_effort high: Invalid params: no reasoning_effort high here; try gpt-6-luna',
   )
+})
+
+test('a permission request is answered by RELAY_POLICY: allow picks allow_once; deny, the default, reject_once', async () => {
+  assert.equal(answer((await fake({ FAKE_ASK: '1', RELAY_POLICY: 'allow' })).events), 'chose allow_once')
+  assert.equal(answer((await fake({ FAKE_ASK: '1', RELAY_POLICY: 'deny' })).events), 'chose reject_once')
+  assert.equal(answer((await fake({ FAKE_ASK: '1' })).events), 'chose reject_once')
+})
+
+test('with RELAY_POLICY=ask the request reaches the plugin as an ask, and its answer reaches the agent', async () => {
+  const b = sandbox()
+  const run = startRelay({ agent, prompt: 'hi', cwd: b.work, env: { FAKE_ASK: '1', RELAY_POLICY: 'ask', RELAY_INBOX: b.inbox } })
+  await run.until((line) => relayEvent([line], 'ask') !== undefined)
+  const ask = relayEvent(run.events, 'ask')
+  assert.ok(ask)
+  assert.equal(ask.title, 'rm -rf build')
+  assert.deepEqual(get(ask, 'options'), [
+    { optionId: 'allow_once', name: 'Allow', kind: 'allow_once' },
+    { optionId: 'reject_once', name: 'Deny', kind: 'reject_once' },
+  ])
+  send(b.inbox, { answer: ask.id, optionId: 'allow_once' })
+  assert.equal(await run.exited, 0, run.stderr)
+  assert.equal(answer(run.events), 'chose allow_once')
+})
+
+test('with RELAY_POLICY=ask and no inbox no answer can come back, so the request is denied', async () => {
+  assert.equal(answer((await fake({ FAKE_ASK: '1', RELAY_POLICY: 'ask' })).events), 'chose reject_once')
 })
