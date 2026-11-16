@@ -19,10 +19,12 @@ export type ToolCallUpdate = Extract<SessionUpdate, { sessionUpdate: 'tool_call'
 /** Whether `bin` runs from PATH: a test of a harness that isn't installed is skipped, not failed. */
 export const installed = (bin: string) => spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 20_000 }).status === 0
 
-// Every sandbox goes when the test process does, through one listener.
+// Every sandbox goes when the test process does, through one listener. codex-acp exits before the `codex
+// app-server` it started, which goes on writing its home for a moment: removal retries (ENOTEMPTY), as
+// rmSync offers for this. Cleanup only: no test waits on it.
 const sandboxes: string[] = []
 process.on('exit', () => {
-  for (const root of sandboxes) rmSync(root, { recursive: true, force: true })
+  for (const root of sandboxes) rmSync(root, { recursive: true, force: true, maxRetries: 10 })
 })
 
 /**

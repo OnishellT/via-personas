@@ -153,7 +153,9 @@ test("a subagent's spawn and follow-up reach the client with no text: Codex does
     await fake.until((made) => received(made).includes(SPAWN) && received(made).includes(FOLLOWUP), server.exited)
     const items = server.notifications.filter((n) => n.method === 'item/completed').map((n) => n.params)
     const activity = items.filter((p) => p?.item?.type === 'subAgentActivity').map((p) => get(p, 'item', 'kind'))
-    assert.deepEqual(activity.slice(0, 2), ['started', 'interacted'])
+    // The child runs on its own: its first answer's `completed` can come before the parent's follow-up.
+    assert.equal(activity[0], 'started')
+    assert.ok(activity.includes('interacted'), JSON.stringify(activity))
     // The client saw neither: no text on the activity, and no message on the child's thread.
     const stream = JSON.stringify(server.notifications)
     assert.equal(stream.includes(SPAWN) || stream.includes(FOLLOWUP), false, 'Codex now sends the text: show it in the nested view')

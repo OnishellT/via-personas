@@ -18,7 +18,9 @@ import {
   textResponse,
 } from './support/fake-model.mts'
 import {
+  alive,
   answer,
+  created,
   get,
   installed,
   notifications,
@@ -29,6 +31,7 @@ import {
   sandbox,
   send,
   sessionOf,
+  sleeping,
   spoken,
   startRelay,
   toolCalls,
@@ -243,4 +246,39 @@ test("a subagent's task and a follow-up sent while it works reach the relay as m
     ],
   )
   assert.equal(answer(run.events.filter((e) => !('sessionId' in e) || e.sessionId === root)), 'DONE')
+})
+
+/** Starts a run whose model asks for a long `sleep`, and resolves once the sleep runs, with its pid. */
+async function sleepingRun(b: Box, seconds: number, env: Record<string, string>) {
+  const pidFile = join(b.work, 'sleep.pid')
+  // The interrupt is sent once the command runs, long before Codex's yield (10 s) would hand it back to the model.
+  fake.enqueue(execCommandResponse('call_sleep', { cmd: sleeping(seconds, pidFile) }), textResponse('REDIRECTED'))
+  // via's bypass mode: the command runs without a question.
+  const run = startRelay({
+    agent: ['node', codexAcp],
+    prompt: 'Sleep.',
+    cwd: b.work,
+    env: { ...b.env, RELAY_AGENT_MODE: 'agent-full-access', RELAY_POLICY: 'allow', ...env },
+  })
+  await created(pidFile, run.exited)
+  const pid = Number(readFileSync(pidFile, 'utf8'))
+  assert.equal(alive(pid), true)
+  return { run, pid }
+}
+
+// Codex keeps a cancelled turn's commands as background terminals (#58): an interrupt ends the turn, not
+// them. The relay closes the session at the run's end, which stops them; until then they run on.
+test('a shell command an interrupt leaves running ends with the run, leaving no process behind', { skip }, async () => {
+  const b = box()
+  const { run, pid } = await sleepingRun(b, 41.7, { RELAY_INBOX: b.inbox })
+  send(b.inbox, { interrupt: 'Stop. Reply with only the word REDIRECTED.' })
+  assert.equal(await run.exited, 0, run.stderr)
+  assert.equal(alive(pid), false)
+  // The interrupt cut the turn mid-command, and its text was the next prompt.
+  assert.deepEqual(
+    relayEventsNamed(run.events, 'prompt_done').map((e) => e.stopReason),
+    ['cancelled', 'end_turn'],
+  )
+  assert.match(JSON.stringify(fake.requests.at(-1)?.input), /Stop\. Reply with only the word REDIRECTED\./)
+  assert.equal(answer(run.events), 'REDIRECTED')
 })
