@@ -59,7 +59,7 @@ export function promptOf(text: string, adapter: PromptAdapter): PromptSpec {
     if (!VALUE[key as PromptKey].test(value)) return bad('expected one whitespace-free value.')
     if (key === 'thinking') {
       if (adapter.thinking.length === 0) return bad(`${label} is not supported: ${adapter.name} takes no thinking level.`)
-      if (!adapter.thinking.includes(value))
+      if (adapter.thinking !== 'offered' && !adapter.thinking.includes(value))
         return bad(`${label} must be one of ${adapter.thinking.join(', ')}; got ${JSON.stringify(value)}.`)
       asked.thinking ??= value
     } else if (key === 'tools') {
@@ -92,7 +92,11 @@ export function helpOf(adapter: HelpAdapter, models: readonly string[]): string 
     lines.push(
       `tools: <list>       passed to ${name} as its tool list: a list of only read, grep, find, ls is read-only; any other, such as -bash,read, can edit and loads the project's .pi extensions.`,
     )
-  if (adapter.thinking.length > 0)
+  if (adapter.thinking === 'offered')
+    lines.push(
+      `thinking: <level>   passed to ${name} as its thinking level; a level the model does not offer is refused, naming those it does.`,
+    )
+  else if (adapter.thinking.length > 0)
     lines.push(`thinking: <level>   passed to ${name} as its thinking level: ${adapter.thinking.join(', ')}.`)
   else lines.push(`thinking:           refused: ${name} takes no thinking level.`)
   lines.push(
@@ -108,7 +112,7 @@ export function helpOf(adapter: HelpAdapter, models: readonly string[]): string 
   if (adapter.steer) lines.push('A message starting interrupt: stops the current step and runs at once.')
   lines.push(`A genuine answer ends with — answered by ${name}, <model>. Example:`)
   if (models[0]) lines.push(`model: ${models[0]}`)
-  if (adapter.thinking.includes('high')) lines.push('thinking: high')
+  if (adapter.thinking === 'offered' || adapter.thinking.includes('high')) lines.push('thinking: high')
   lines.push('Review the error handling in src/api.')
   return lines.join('\n')
 }

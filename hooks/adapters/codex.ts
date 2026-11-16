@@ -3,7 +3,6 @@ import { relayEvents, sessionLost } from '../acp/events'
 import { isRecord } from '../acp/json'
 import { type AcpMode, type AcpSpec, acpMode, acpStart } from '../acp/spec'
 import type { Adapter, Mode } from '../adapter'
-import { CODEX_EFFORTS } from '../wire'
 
 // Read-only is the one mode via defends. Otherwise codex works in its workspace sandbox and asks before
 // going past it, as codex exec did; the question reaches the person, except in bypass (approved) and
@@ -50,7 +49,7 @@ export const codex = {
   },
   readOnly: 'enforced',
   tools: ['read', 'write'], // write: the same as no tools line, which an agent may not think to leave out
-  thinking: CODEX_EFFORTS,
+  thinking: 'offered',
   steer: true,
   defaultModel: false,
   // codex-acp and its whole dependency tree, locked with integrity hashes in relay/codex-acp.

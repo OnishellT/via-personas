@@ -128,3 +128,31 @@ test('a stopped run cancels the turn, then closes the session, before the kill',
   assert.deepEqual(logged(log), ['prompt', 'cancel', 'close'])
   assert.equal(stdout.includes('"relay":"done"'), false)
 })
+
+const configured = (config) => {
+  const log = join(mkdtempSync(join(tmpdir(), 'relay-')), 'log')
+  const run = spawnSync('node', [relay, '--', 'node', agent], {
+    input: 'hi',
+    encoding: 'utf8',
+    timeout: 20_000,
+    env: { ...process.env, FAKE_ECHO: '1', FAKE_OPTIONS: '1', FAKE_LOG: log, RELAY_CONFIG: JSON.stringify(config) },
+  })
+  const events = run.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+  return { status: run.status, error: events.find((e) => e.relay === 'error')?.message, set: logged(log) }
+}
+
+test("a config option the session offers is set; a value it doesn't offer is refused, naming those it does", () => {
+  assert.deepEqual(configured({ reasoning_effort: 'high' }), { status: 0, error: undefined, set: ['set reasoning_effort=high'] })
+  assert.deepEqual(configured({ reasoning_effort: 'ultra' }), {
+    status: 1,
+    error: 'the agent offers reasoning_effort low, medium, high, xhigh for gpt-6-luna, not ultra',
+    set: [],
+  })
+})
+
+test('a config option the session does not offer is refused, not sent', () => {
+  assert.deepEqual(configured({ 'fast-mode': 'on' }), { status: 1, error: 'the agent offers no fast-mode option for gpt-6-luna', set: [] })
+})

@@ -31,6 +31,3 @@ export type PiEvent =
       readonly errorMessage?: string
       readonly result?: { readonly tokensBefore?: number; readonly estimatedTokensAfter?: number; readonly summary?: string }
     }
-
-// Codex's reasoning efforts, as its config takes them.
-export const CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'persistent'] as const

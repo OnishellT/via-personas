@@ -41,8 +41,6 @@ export function opencodeRun(choice: Choice, mode: Mode, agentId: string): { agen
   return choice.tools === 'read' || mode === 'plan' ? { agent: `via-read-${agentId}`, policy } : { policy }
 }
 
-const THINKING = ['minimal', 'low', 'medium', 'high', 'max'] as const
-
 export const opencode = {
   name: 'opencode',
   bin: 'opencode',
@@ -50,7 +48,7 @@ export const opencode = {
   catalogue: { argv: ['opencode', 'models'], ids: (stdout: string) => stdout.split('\n').map((line) => line.trim()) },
   readOnly: 'enforced',
   tools: ['read', 'write'], // write: the same as no tools line, which an agent may not think to leave out
-  thinking: THINKING,
+  thinking: 'offered',
   steer: true,
   defaultModel: false,
   models: 'opencode models lists them.',

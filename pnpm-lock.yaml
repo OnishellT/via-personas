@@ -190,7 +190,6 @@ overrides:
   semver: '-'
   undici: '-'
   yaml: '-'
-  '@openai/codex': '-'
 
 importers:
 
@@ -205,9 +204,6 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 1.5.2
         version: 1.5.2
-      '@openai/codex-sdk':
-        specifier: 0.167.1
-        version: 0.167.1
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6
@@ -478,10 +474,6 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
-
-  '@openai/codex-sdk@0.167.1':
-    resolution: {integrity: sha512-EJHNG/bZ+/rptIIZMigTgnqrukDAgc/rmUBXLeDrFwOeunno7tQ4sWt/VPzeRXnKGq6yd4jprpgRlzgpYvayzQ==}
-    engines: {node: '>=18'}
 
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
@@ -795,8 +787,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
-
-  '@openai/codex-sdk@0.167.1': {}
 
   '@types/node@26.6.6':
     dependencies:

@@ -463,16 +463,13 @@ test('a dismissed or unanswered question is a deny', async ($, on) => {
   expect(inbox).toContain(JSON.stringify({ answer: '7-k1-1', optionId: 'abort' }))
 })
 
-test('a thinking line becomes the reasoning_effort config option; a level codex lacks is refused', async ($, on) => {
+// Which levels a model has is codex's to say: the relay checks the line against what the session offers.
+test('a thinking line becomes the reasoning_effort config option, whatever its level', async ($, on) => {
   const spawns: Spawn[] = []
   arrange(on, spawns)
-  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'thinking: high\ngo' })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'thinking: ultra\ngo' })
   await runTurn($)
-  expect(JSON.parse(spawns[0]?.env?.RELAY_CONFIG ?? '{}')).toEqual({ reasoning_effort: 'high' })
-  await $.turn.start({ turnId: 't2', agentId: 'a1', text: 'thinking: off\ngo' })
-  const { result } = await runTurn($, { ...STEP, turnId: 't2', messageCount: 2 })
-  expect(spawns).toHaveLength(1)
-  expect(result.answer).toContain('thinking must be one of minimal, low')
+  expect(JSON.parse(spawns[0]?.env?.RELAY_CONFIG ?? '{}')).toEqual({ reasoning_effort: 'ultra' })
 })
 
 test('a lost session is forgotten, so the next message starts fresh', async ($, on) => {

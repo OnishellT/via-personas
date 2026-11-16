@@ -258,8 +258,18 @@ const result = await acp
     } catch {
       fail('RELAY_CONFIG is not a JSON object')
     }
+    // Checked against what the session offers for its model, after the model is set: an agent may take a value
+    // it does not offer and drop it silently, as codex-acp takes fast-mode on for a model without it.
+    const running = configOptions.find((o) => o.id === 'model')
+    const forModel = running && 'currentValue' in running && typeof running.currentValue === 'string' ? ` for ${running.currentValue}` : ''
     for (const [configId, value] of Object.entries(extra)) {
       if (typeof value !== 'string') fail(`RELAY_CONFIG.${configId} must be a string`)
+      const option = configOptions.find((o) => o.id === configId)
+      if (option === undefined) fail(`the agent offers no ${configId} option${forModel}`)
+      if (option?.type === 'select') {
+        const values = option.options.flatMap((o) => ('options' in o ? o.options : [o])).map((o) => o.value)
+        if (!values.includes(value as string)) fail(`the agent offers ${configId} ${values.join(', ')}${forModel}, not ${String(value)}`)
+      }
       const set = await ctx
         .request(acp.methods.agent.session.setConfigOption, { sessionId, configId, value: value as string })
         .catch((error: unknown) =>

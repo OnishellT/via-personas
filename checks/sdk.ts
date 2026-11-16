@@ -3,9 +3,8 @@
 // constant below is typed `true` only while its check holds, and names what broke otherwise.
 import type { SessionUpdate as AcpUpdate, ToolCallContent } from '@agentclientprotocol/sdk/unstable'
 import type { JsonAgentSessionEvent } from '@earendil-works/pi-coding-agent'
-import type { ModelReasoningEffort } from '@openai/codex-sdk'
 import type { ContentRead, Read } from '../hooks/acp/wire'
-import type { CODEX_EFFORTS, PiEvent } from '../hooks/wire'
+import type { PiEvent } from '../hooks/wire'
 
 type None<T> = [T] extends [never] ? true : T
 // A type that fails to resolve is any, and any passes every check: so each one checked must be real. pi's
@@ -28,7 +27,7 @@ type Reply = Extract<Pi<'message_end'>['message'], { role: 'assistant' }>
 type OurMessage = NonNullable<Ours<'message_end'>['message']>
 type Delta = NonNullable<Pi<'message_update'>['assistantMessageEvent']>
 export const resolved: Real<
-  AcpUpdate | ToolCallContent | JsonAgentSessionEvent | ModelReasoningEffort | Reply | Reply['usage'] | Delta | NonNullable<Pi<'compaction_end'>['result']>
+  AcpUpdate | ToolCallContent | JsonAgentSessionEvent | Reply | Reply['usage'] | Delta | NonNullable<Pi<'compaction_end'>['result']>
 > = true
 export const piEvents: None<Exclude<PiEvent['type'], JsonAgentSessionEvent['type']>> = true
 export const piFields: None<{ [K in PiEvent['type']]: Exclude<keyof Ours<K>, keyof Pi<K>> }[PiEvent['type']]> = true
@@ -41,8 +40,3 @@ export const piDeltas: None<{ [K in 'text_delta' | 'thinking_delta']: Exclude<'d
 export const piCompaction: None<
   Exclude<keyof NonNullable<Ours<'compaction_end'>['result']>, keyof NonNullable<Pi<'compaction_end'>['result']>>
 > = true
-
-// Codex: the efforts via offers are exactly the ones Codex takes.
-type Efforts = (typeof CODEX_EFFORTS)[number]
-export const effortsKnown: None<Exclude<Efforts, ModelReasoningEffort>> = true
-export const effortsAll: None<Exclude<ModelReasoningEffort, Efforts>> = true

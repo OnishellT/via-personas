@@ -10435,8 +10435,16 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
   } catch {
     fail("RELAY_CONFIG is not a JSON object");
   }
+  const running = configOptions.find((o) => o.id === "model");
+  const forModel = running && "currentValue" in running && typeof running.currentValue === "string" ? ` for ${running.currentValue}` : "";
   for (const [configId, value] of Object.entries(extra)) {
     if (typeof value !== "string") fail(`RELAY_CONFIG.${configId} must be a string`);
+    const option = configOptions.find((o) => o.id === configId);
+    if (option === void 0) fail(`the agent offers no ${configId} option${forModel}`);
+    if (option?.type === "select") {
+      const values = option.options.flatMap((o) => "options" in o ? o.options : [o]).map((o) => o.value);
+      if (!values.includes(value)) fail(`the agent offers ${configId} ${values.join(", ")}${forModel}, not ${String(value)}`);
+    }
     const set = await ctx.request(methods.agent.session.setConfigOption, { sessionId, configId, value }).catch(
       (error2) => fail(`the agent refused ${configId} ${String(value)}: ${String(error2?.message ?? error2)}`)
     );

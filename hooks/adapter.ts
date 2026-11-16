@@ -18,7 +18,9 @@ export type Adapter = {
   }
   readonly readOnly: 'enforced' | 'none'
   readonly tools?: readonly string[] // the only values a tools line may take; absent: a free tool list
-  readonly thinking: readonly string[]
+  // The levels a thinking line may take, or offered: the harness lists its own for each model, and refuses
+  // one it does not have (an ACP config option), so a list here would only drift from it.
+  readonly thinking: readonly string[] | 'offered'
   readonly steer: boolean
   readonly defaultModel: boolean // takes the plugin's defaultModel setting
   readonly models?: string
