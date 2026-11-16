@@ -10437,8 +10437,8 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
   }
   const running = configOptions.find((o) => o.id === "model");
   const forModel = running && "currentValue" in running && typeof running.currentValue === "string" ? ` for ${running.currentValue}` : "";
-  for (const [configId, value] of Object.entries(extra)) {
-    if (typeof value !== "string") fail(`RELAY_CONFIG.${configId} must be a string`);
+  const setOption = async (configId, value) => {
+    if (typeof value !== "string") fail(`${configId} must be a string`);
     const option = configOptions.find((o) => o.id === configId);
     if (option === void 0) fail(`the agent offers no ${configId} option${forModel}`);
     if (option?.type === "select") {
@@ -10449,7 +10449,28 @@ var result = await client({ name: "via" }).onRequest(methods.client.session.requ
       (error2) => fail(`the agent refused ${configId} ${String(value)}: ${String(error2?.message ?? error2)}`)
     );
     configOptions = set.configOptions ?? configOptions;
+  };
+  const reserved = (o) => ["mode", "model", "thought_level"].includes(String(o.category)) || o.id === "mode" || o.id === "model";
+  let options = {};
+  try {
+    options = JSON.parse(process.env.RELAY_OPTIONS || "{}");
+  } catch {
+    fail("RELAY_OPTIONS is not a JSON object");
   }
+  const settable = () => configOptions.filter((o) => !reserved(o)).map((o) => o.id);
+  for (const [configId, value] of Object.entries(options)) {
+    const option = configOptions.find((o) => o.id === configId);
+    if (option && reserved(option)) fail(`${configId} is set by its own line (model, thinking, tools or plan mode), not a config line`);
+    if (option === void 0) {
+      const title = `the agent offers no ${configId} option${forModel}, so this run goes without it; it offers ${settable().join(", ") || "none"}. config: ${configId}= drops it.`;
+      out({ sessionId, update: { sessionUpdate: "notice", severity: "warning", title } });
+      continue;
+    }
+    await setOption(configId, value);
+  }
+  for (const [configId, value] of Object.entries(extra)) await setOption(configId, value);
+  if (modeId && Object.keys(options).length > 0)
+    await ctx.request(methods.agent.session.setMode, { sessionId, modeId }).catch((error2) => fail(`the agent refused mode ${modeId}: ${String(error2?.message ?? error2)}`));
   const current = configOptions.find((o) => o.id === "model");
   if (current && "currentValue" in current && typeof current.currentValue === "string")
     out({ relay: "model", name: current.currentValue });

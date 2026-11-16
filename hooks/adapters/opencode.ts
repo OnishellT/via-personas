@@ -49,6 +49,7 @@ export const opencode = {
   readOnly: 'enforced',
   tools: ['read', 'write'], // write: the same as no tools line, which an agent may not think to leave out
   thinking: 'offered',
+  options: true,
   steer: true,
   defaultModel: false,
   models: 'opencode models lists them.',
@@ -78,6 +79,7 @@ export const opencode = {
       session,
       model: choice.model,
       thinking: choice.thinking,
+      options: choice.config,
       ...(run.agent ? { config: { mode: run.agent }, env: { ...injected, OPENCODE_DISABLE_PROJECT_CONFIG: '1' } } : {}),
     })
   },

@@ -12,6 +12,12 @@ import { cutOff, type RunResult, run } from './run'
 import { openInbox } from './steer'
 import type { Turn, World } from './world'
 
+// The options held, without those an empty config line dropped; none left is no config at all.
+function configOf(options: Readonly<Record<string, string>>): Readonly<Record<string, string>> | undefined {
+  const kept = Object.entries(options).filter(([, value]) => value !== '')
+  return kept.length > 0 ? Object.fromEntries(kept) : undefined
+}
+
 type StepHook = StreamHook<'turn.step'>
 type Engine = Parameters<StepHook>[0]
 type Step = Parameters<StepHook>[1]
@@ -209,12 +215,25 @@ async function* begin(
     ...(asked.model ? { model: asked.model } : {}),
     ...(asked.tools ? { tools: asked.tools } : {}),
     ...(asked.thinking ? { thinking: asked.thinking } : {}),
+    // A config line adds to or replaces the options held, one by one; an empty value drops its option.
+    ...(asked.config ? { config: configOf({ ...held?.config, ...asked.config }) } : {}),
   }
-  const changed = merged.model !== held?.model || merged.tools !== held?.tools || merged.thinking !== held?.thinking
-  if (changed) await updateRecord(w, $, agentId, { choice: merged })
-
+  const changed =
+    merged.model !== held?.model ||
+    merged.tools !== held?.tools ||
+    merged.thinking !== held?.thinking ||
+    JSON.stringify(merged.config) !== JSON.stringify(held?.config)
   // What the person allows Claude itself, as the spawn carried it: plan mode is read-only here too.
   const mode = record.mode as Mode
+  // A harness may name an option that loosens its sandbox anything it likes, so a read-only run takes none:
+  // the relay's refusal of mode options is a list, and a list misses what it doesn't name. Refused before the
+  // record keeps them, or every later message would be refused too.
+  if (merged.config && (mode === 'plan' || merged.tools === 'read' || record.rebuilt)) {
+    const refused = `A read-only ${adapter.name} run takes no config lines: an option could loosen what read-only enforces. Start a new agent without \`tools: read\`, outside plan mode, to use them.`
+    return yield* respond(e, textChunks(refused), refused)
+  }
+  if (changed) await updateRecord(w, $, agentId, { choice: merged })
+
   const withModel: Choice = merged.model ? merged : { ...merged, ...(defaultModel ? { model: defaultModel } : {}) }
   // An agent with no record runs read-only (adapterOf): its refusals say so, not that the person chose it.
   const anyway = record.rebuilt

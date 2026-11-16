@@ -154,5 +154,59 @@ test("a config option the session offers is set; a value it doesn't offer is ref
 })
 
 test('a config option the session does not offer is refused, not sent', () => {
-  assert.deepEqual(configured({ 'fast-mode': 'on' }), { status: 1, error: 'the agent offers no fast-mode option for gpt-6-luna', set: [] })
+  assert.deepEqual(configured({ speed: 'fast' }), { status: 1, error: 'the agent offers no speed option for gpt-6-luna', set: [] })
+})
+
+const personal = (options, env = {}) => {
+  const log = join(mkdtempSync(join(tmpdir(), 'relay-')), 'log')
+  const run = spawnSync('node', [relay, '--', 'node', agent], {
+    input: 'hi',
+    encoding: 'utf8',
+    timeout: 20_000,
+    env: { ...process.env, FAKE_ECHO: '1', FAKE_OPTIONS: '1', FAKE_LOG: log, RELAY_OPTIONS: JSON.stringify(options), ...env },
+  })
+  const events = run.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+  return { status: run.status, error: events.find((e) => e.relay === 'error')?.message, set: logged(log) }
+}
+
+test("a person's config option is set when offered; one the session lacks is a warning, and the run goes on", () => {
+  assert.deepEqual(personal({ 'fast-mode': 'on' }), { status: 0, error: undefined, set: ['set fast-mode=on'] })
+  const log = join(mkdtempSync(join(tmpdir(), 'relay-')), 'log')
+  const run = spawnSync('node', [relay, '--', 'node', agent], {
+    input: 'hi',
+    encoding: 'utf8',
+    timeout: 20_000,
+    env: { ...process.env, FAKE_ECHO: '1', FAKE_OPTIONS: '1', FAKE_LOG: log, RELAY_OPTIONS: JSON.stringify({ speed: 'fast' }) },
+  })
+  const events = run.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+  assert.equal(run.status, 0)
+  assert.deepEqual(logged(log), [])
+  assert.equal(
+    events.find((e) => e.update?.sessionUpdate === 'notice')?.update.title,
+    'the agent offers no speed option for gpt-6-luna, so this run goes without it; it offers fast-mode. config: speed= drops it.',
+  )
+  assert.equal(events.find((e) => e.relay === 'done')?.stopReason, 'end_turn')
+})
+
+test("via's mode is set again after a person's options, so one named some other way cannot leave the session in another", () => {
+  assert.deepEqual(personal({ 'fast-mode': 'on' }, { RELAY_AGENT_MODE: 'workspace-write' }).set, [
+    'mode workspace-write',
+    'set fast-mode=on',
+    'mode workspace-write',
+  ])
+})
+
+test("a person's config line never sets a mode, model or thinking option: a mode would undo read-only", () => {
+  for (const id of ['mode', 'model', 'reasoning_effort'])
+    assert.deepEqual(personal({ [id]: id === 'mode' ? 'agent-full-access' : 'x' }), {
+      status: 1,
+      error: `${id} is set by its own line (model, thinking, tools or plan mode), not a config line`,
+      set: [],
+    })
 })

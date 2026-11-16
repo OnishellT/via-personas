@@ -12,6 +12,8 @@
 //   RELAY_MODEL       the agent's `model` config option
 //   RELAY_AGENT_MODE  the agent's own mode (session/set_mode), such as codex's workspace-write
 //   RELAY_CONFIG      a JSON object of other config options to set, such as {"reasoning_effort": "high"}
+//   RELAY_OPTIONS     a JSON object of the person's own config options, such as {"fast-mode": "on"}: never a
+//                     mode, model or thinking option, and each checked against what the session offers
 //   RELAY_POLICY      how permission requests are answered: allow, deny (the default) or ask (every request
 //                     goes to the plugin)
 // Prints each ACP session update as received, and {"relay": ...} lines for its own events.
@@ -262,8 +264,8 @@ const result = await acp
     // it does not offer and drop it silently, as codex-acp takes fast-mode on for a model without it.
     const running = configOptions.find((o) => o.id === 'model')
     const forModel = running && 'currentValue' in running && typeof running.currentValue === 'string' ? ` for ${running.currentValue}` : ''
-    for (const [configId, value] of Object.entries(extra)) {
-      if (typeof value !== 'string') fail(`RELAY_CONFIG.${configId} must be a string`)
+    const setOption = async (configId: string, value: unknown) => {
+      if (typeof value !== 'string') fail(`${configId} must be a string`)
       const option = configOptions.find((o) => o.id === configId)
       if (option === undefined) fail(`the agent offers no ${configId} option${forModel}`)
       if (option?.type === 'select') {
@@ -277,6 +279,36 @@ const result = await acp
         )
       configOptions = set.configOptions ?? configOptions
     }
+    // The person's options (RELAY_OPTIONS) never set what via's own lines do: a mode would undo read-only
+    // (codex offers read-only to agent-full-access as one), and the model and thinking have lines of their own.
+    const reserved = (o: acp.SessionConfigOption) =>
+      ['mode', 'model', 'thought_level'].includes(String(o.category)) || o.id === 'mode' || o.id === 'model'
+    let options: Record<string, unknown> = {}
+    try {
+      options = JSON.parse(process.env.RELAY_OPTIONS || '{}') as Record<string, unknown>
+    } catch {
+      fail('RELAY_OPTIONS is not a JSON object')
+    }
+    const settable = () => configOptions.filter((o) => !reserved(o)).map((o) => o.id)
+    for (const [configId, value] of Object.entries(options)) {
+      const option = configOptions.find((o) => o.id === configId)
+      if (option && reserved(option)) fail(`${configId} is set by its own line (model, thinking, tools or plan mode), not a config line`)
+      // Not a failure: an option held from an earlier message may be one this model lacks, such as Codex's
+      // fast-mode on a model with no fast tier, and every later message would fail on it.
+      if (option === undefined) {
+        const title = `the agent offers no ${configId} option${forModel}, so this run goes without it; it offers ${settable().join(', ') || 'none'}. config: ${configId}= drops it.`
+        out({ sessionId, update: { sessionUpdate: 'notice', severity: 'warning', title } })
+        continue
+      }
+      await setOption(configId, value)
+    }
+    // via's own options last: they are what the run needs. Its mode again too, after the person's options: one
+    // the session names some other way than mode must not leave it in another.
+    for (const [configId, value] of Object.entries(extra)) await setOption(configId, value)
+    if (modeId && Object.keys(options).length > 0)
+      await ctx
+        .request(acp.methods.agent.session.setMode, { sessionId, modeId })
+        .catch((error: unknown) => fail(`the agent refused mode ${modeId}: ${String((error as { message?: unknown })?.message ?? error)}`))
     const current = configOptions.find((o) => o.id === 'model')
     if (current && 'currentValue' in current && typeof current.currentValue === 'string')
       out({ relay: 'model', name: current.currentValue })

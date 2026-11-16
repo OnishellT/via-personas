@@ -25,6 +25,8 @@ const select = (id, category, currentValue, values) => ({
 const OPTIONS = [
   select('model', 'model', 'gpt-6-luna', ['gpt-6-luna', 'gpt-6.1-sol']),
   select('reasoning_effort', 'thought_level', 'medium', ['low', 'medium', 'high', 'xhigh']),
+  select('mode', 'mode', 'read-only', ['read-only', 'agent-full-access']),
+  select('fast-mode', 'model_config', 'off', ['off', 'on']),
 ]
 let release
 await acp
@@ -37,6 +39,10 @@ await acp
   .onRequest(acp.methods.agent.session.new, () =>
     process.env.FAKE_OPTIONS === '1' ? { sessionId: 's1', configOptions: OPTIONS } : { sessionId: 's1' },
   )
+  .onRequest(acp.methods.agent.session.setMode, (ctx) => {
+    log(`mode ${ctx.params.modeId}`)
+    return {}
+  })
   .onRequest(acp.methods.agent.session.setConfigOption, (ctx) => {
     log(`set ${ctx.params.configId}=${ctx.params.value}`)
     return { configOptions: OPTIONS }

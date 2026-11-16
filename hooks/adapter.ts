@@ -21,6 +21,7 @@ export type Adapter = {
   // The levels a thinking line may take, or offered: the harness lists its own for each model, and refuses
   // one it does not have (an ACP config option), so a list here would only drift from it.
   readonly thinking: readonly string[] | 'offered'
+  readonly options?: true // takes config lines: options of its ACP session, which the relay checks
   readonly steer: boolean
   readonly defaultModel: boolean // takes the plugin's defaultModel setting
   readonly models?: string
@@ -67,5 +68,5 @@ export type Adapter = {
   failure?(exit: ProcessSpawnResult, stderr: string): { message: string; sessionLost?: boolean } | undefined
 }
 
-export type PromptAdapter = Pick<Adapter, 'name' | 'readOnly' | 'thinking' | 'tools'>
+export type PromptAdapter = Pick<Adapter, 'name' | 'readOnly' | 'thinking' | 'tools' | 'options'>
 export type HelpAdapter = PromptAdapter & Pick<Adapter, 'bin' | 'about' | 'steer' | 'defaultModel' | 'models'>

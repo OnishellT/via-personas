@@ -50,6 +50,7 @@ export const codex = {
   readOnly: 'enforced',
   tools: ['read', 'write'], // write: the same as no tools line, which an agent may not think to leave out
   thinking: 'offered',
+  options: true,
   steer: true,
   defaultModel: false,
   // codex-acp and its whole dependency tree, locked with integrity hashes in relay/codex-acp.
@@ -103,6 +104,7 @@ export const codex = {
       session,
       model: choice.model,
       thinking: choice.thinking,
+      options: choice.config,
       command: ['node', installed],
       ...(readOnly ? { env: guard } : {}),
     })

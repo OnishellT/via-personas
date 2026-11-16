@@ -68,6 +68,15 @@ test('an invalid pi-thinking level answers with the bad value and the valid leve
   expect(result.answer).toContain('off, minimal, low, medium, high, xhigh, max')
 })
 
+test('a config line is refused on pi, which has no ACP session options, without spawning pi', async ($, on) => {
+  const spawns: Spawn[] = []
+  arrange(on, spawns, split(lines))
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'config: fast-mode=on\ngo' })
+  const { result } = await run($)
+  expect(spawns).toEqual([])
+  expect(result.answer).toContain('config is not supported: pi takes no config options.')
+})
+
 test('a follow-up turn without a pi-thinking line keeps the agent thinking level', async ($, on) => {
   const spawns: Spawn[] = []
   arrange(on, spawns, split(lines))

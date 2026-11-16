@@ -2,6 +2,7 @@ export type Choice = {
   model?: string
   tools?: string
   thinking?: string
+  config?: Readonly<Record<string, string>> // config lines: the harness's own options, by id
 }
 declare module 'claude-code' {
   interface EngineInterface {

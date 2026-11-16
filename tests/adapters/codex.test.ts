@@ -472,6 +472,44 @@ test('a thinking line becomes the reasoning_effort config option, whatever its l
   expect(JSON.parse(spawns[0]?.env?.RELAY_CONFIG ?? '{}')).toEqual({ reasoning_effort: 'ultra' })
 })
 
+test("a config line goes to the relay as the person's option, and holds for follow-ups until a new line replaces it", async ($, on) => {
+  const spawns: Spawn[] = []
+  arrange(on, spawns)
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'config: fast-mode=on\nconfig: collaboration_mode=plan\ngo' })
+  await runTurn($)
+  expect(JSON.parse(spawns[0]?.env?.RELAY_OPTIONS ?? '{}')).toEqual({ 'fast-mode': 'on', collaboration_mode: 'plan' })
+  await $.turn.start({ turnId: 't2', agentId: 'a1', text: 'config: fast-mode=off\nand again' })
+  await runTurn($, { ...STEP, turnId: 't2', messageCount: 2 })
+  expect(JSON.parse(spawns[1]?.env?.RELAY_OPTIONS ?? '{}')).toEqual({ 'fast-mode': 'off', collaboration_mode: 'plan' })
+  // An empty value drops the option; none left sends none.
+  await $.turn.start({ turnId: 't3', agentId: 'a1', text: 'config: fast-mode=\nconfig: collaboration_mode=\nonce more' })
+  await runTurn($, { ...STEP, turnId: 't3', messageCount: 3 })
+  expect(spawns[2]?.env?.RELAY_OPTIONS).toBeUndefined()
+})
+
+test('a read-only run takes no config line, whatever the option, with no spawn', async ($, on) => {
+  const spawns: Spawn[] = []
+  arrange(on, spawns)
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'tools: read\nconfig: fast-mode=on\ngo' })
+  const { result } = await runTurn($)
+  expect(spawns).toHaveLength(0)
+  expect(result.answer).toContain('A read-only codex run takes no config lines')
+  // Refused before the record kept it: the next message runs.
+  await $.turn.start({ turnId: 't2', agentId: 'a1', text: 'tools: read\ngo' })
+  await runTurn($, { ...STEP, turnId: 't2', messageCount: 2 })
+  expect(spawns).toHaveLength(1)
+  expect(spawns[0]?.env?.RELAY_OPTIONS).toBeUndefined()
+})
+
+test('a config line that is not <option>=<value> is refused, with no spawn', async ($, on) => {
+  const spawns: Spawn[] = []
+  arrange(on, spawns)
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'config: fast-mode\ngo' })
+  const { result } = await runTurn($)
+  expect(spawns).toHaveLength(0)
+  expect(result.answer).toContain('expected <option>=<value>, such as fast-mode=on, or <option>= to drop it.')
+})
+
 test('a lost session is forgotten, so the next message starts fresh', async ($, on) => {
   const spawns: Spawn[] = []
   const { records } = arrange(on, spawns, {

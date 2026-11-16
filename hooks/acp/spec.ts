@@ -20,6 +20,7 @@ function relayEnv(c: {
   agentMode?: string
   policy: Policy
   config?: Record<string, string>
+  options?: Readonly<Record<string, string>>
 }) {
   return {
     RELAY_POLICY: c.policy,
@@ -28,6 +29,7 @@ function relayEnv(c: {
     ...(c.model ? { RELAY_MODEL: c.model } : {}),
     ...(c.agentMode ? { RELAY_AGENT_MODE: c.agentMode } : {}),
     ...(c.config && Object.keys(c.config).length > 0 ? { RELAY_CONFIG: JSON.stringify(c.config) } : {}),
+    ...(c.options && Object.keys(c.options).length > 0 ? { RELAY_OPTIONS: JSON.stringify(c.options) } : {}),
   }
 }
 
@@ -59,6 +61,7 @@ export type AcpRun = {
   readonly command?: readonly string[]
   readonly env?: Readonly<Record<string, string>>
   readonly config?: Readonly<Record<string, string>>
+  readonly options?: Readonly<Record<string, string>> // the person's config lines
 }
 
 export function acpMode(spec: AcpSpec, readOnly: boolean, mode: Mode): AcpMode {
@@ -74,7 +77,16 @@ export function acpStart(spec: AcpSpec, run: AcpRun): ProcessSpawnRequest {
   return {
     argv: relayArgv(run.root, run.command ?? spec.command),
     env: {
-      ...relayEnv({ inbox: run.inbox, steer: spec.steer, session: run.session, model: run.model, agentMode, policy, config }),
+      ...relayEnv({
+        inbox: run.inbox,
+        steer: spec.steer,
+        session: run.session,
+        model: run.model,
+        agentMode,
+        policy,
+        config,
+        options: run.options,
+      }),
       ...(spec.env ?? {}),
       ...(run.env ?? {}),
     },

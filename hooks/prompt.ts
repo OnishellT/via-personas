@@ -2,9 +2,14 @@ import type { HelpAdapter, PromptAdapter } from './adapter'
 
 // A model never starts with '-': passed as its own argument, it would read as a flag. A pi tool list may
 // (-bash,read removes bash), since it always follows --tools.
-const VALUE = { model: /^[A-Za-z0-9_.:/*~@+][A-Za-z0-9_.:/*~@+-]*$/, tools: /^[A-Za-z0-9_*+,:.-]+$/, thinking: /^\S+$/ }
+const VALUE = {
+  model: /^[A-Za-z0-9_.:/*~@+][A-Za-z0-9_.:/*~@+-]*$/,
+  tools: /^[A-Za-z0-9_*+,:.-]+$/,
+  thinking: /^\S+$/,
+  config: /^[A-Za-z0-9_.-]+=\S*$/,
+}
 type PromptKey = keyof typeof VALUE
-const NEUTRAL_LINE = /^(model|tools|thinking):[ \t]*(.*?)[ \t]*$/
+const NEUTRAL_LINE = /^(model|tools|thinking|config):[ \t]*(.*?)[ \t]*$/
 const ALIAS_LINE = /^([A-Za-z]+)-([A-Za-z]+):[ \t]*(.*?)[ \t]*$/
 const HELP_LINE = /^([A-Za-z]+)-help[ \t]*$/i
 
@@ -13,6 +18,7 @@ export type PromptSpec = {
   model?: string
   tools?: string
   thinking?: string
+  config?: Record<string, string>
   help?: boolean
   error?: string
 }
@@ -54,10 +60,19 @@ export function promptOf(text: string, adapter: PromptAdapter): PromptSpec {
     const bad = (why: string) => ({ prompt: text, error: `Invalid ${adapter.name} prompt line ${JSON.stringify(line)}: ${why}` })
     if (!(key in VALUE))
       return bad(
-        `unknown key; known keys are model, tools and thinking (or ${adapter.name}-model, ${adapter.name}-tools and ${adapter.name}-thinking).`,
+        `unknown key; known keys are model, tools, thinking and config (or ${adapter.name}-model, ${adapter.name}-tools, ${adapter.name}-thinking and ${adapter.name}-config).`,
       )
-    if (!VALUE[key as PromptKey].test(value)) return bad('expected one whitespace-free value.')
-    if (key === 'thinking') {
+    if (!VALUE[key as PromptKey].test(value))
+      return bad(
+        key === 'config'
+          ? 'expected <option>=<value>, such as fast-mode=on, or <option>= to drop it.'
+          : 'expected one whitespace-free value.',
+      )
+    if (key === 'config') {
+      if (!adapter.options) return bad(`${label} is not supported: ${adapter.name} takes no config options.`)
+      const at = value.indexOf('=')
+      asked.config = { ...asked.config, [value.slice(0, at)]: value.slice(at + 1) }
+    } else if (key === 'thinking') {
       if (adapter.thinking.length === 0) return bad(`${label} is not supported: ${adapter.name} takes no thinking level.`)
       if (adapter.thinking !== 'offered' && !adapter.thinking.includes(value))
         return bad(`${label} must be one of ${adapter.thinking.join(', ')}; got ${JSON.stringify(value)}.`)
@@ -99,6 +114,10 @@ export function helpOf(adapter: HelpAdapter, models: readonly string[]): string 
   else if (adapter.thinking.length > 0)
     lines.push(`thinking: <level>   passed to ${name} as its thinking level: ${adapter.thinking.join(', ')}.`)
   else lines.push(`thinking:           refused: ${name} takes no thinking level.`)
+  if (adapter.options)
+    lines.push(
+      `config: <id>=<v>    one of ${name}'s own session options, such as fast-mode=on; one per line. An option the model does not offer is skipped with a warning naming those it does; <id>= drops a held one; a read-only run takes none; mode, model and thinking are set by their own lines.`,
+    )
   lines.push(
     adapter.defaultModel
       ? `Model precedence: a model line, then the plugin's defaultModel setting, then ${name}'s own default.`
