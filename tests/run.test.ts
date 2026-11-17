@@ -239,6 +239,24 @@ test('an auto-mode spawned agent hands back on its first step even without a ses
   expect(result.toolUses[0]?.name).toBe('SubagentHandback')
 })
 
+// Claude Code takes an auto-mode agent's answer only from its handback: plain text, it asks again and
+// then reports the agent sent nothing.
+test('an auto-mode agent hands back what via says before running it, once', async ($, on) => {
+  const spawns: Spawn[] = []
+  arrange(on, spawns, split(lines))
+  on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }))
+  await spawnPi($, 'auto')
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'model: two words\ngo' })
+  const { result } = await run($)
+  expect(result.answer).toContain('Invalid pi prompt line "model: two words"')
+  expect(result.toolUses).toEqual([{ name: 'SubagentHandback', input: { message: result.answer } }])
+  // A later step, as after a compaction, repeats it as text.
+  const again = await run($)
+  expect(again.result.answer).toBe(result.answer)
+  expect(again.result.toolUses).toEqual([])
+  expect(spawns).toEqual([])
+})
+
 test('a default-mode spawned agent answers in plain text', async ($, on) => {
   arrange(on, [], split(lines))
   on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }))

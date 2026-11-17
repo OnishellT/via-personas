@@ -194,19 +194,28 @@ async function* begin(
   record: AgentRecord,
   turn: Turn,
 ): AsyncGenerator<TurnStepChunk, TurnStepResult | Job> {
+  // An answer before any run, saved and handed back as a run's would be: auto mode takes an answer only
+  // from a handback, and a later step repeats it as text.
+  const say = async function* (text: string): AsyncGenerator<TurnStepChunk, TurnStepResult> {
+    const handback = await handbackOf($, agentId, record).catch(() => record.handback)
+    turn.done = true
+    await updateRecord(w, $, agentId, { report: text, handedBack: handback })
+    if (handback) return yield* deliver(adapter.name, e, 0, text, null)
+    return yield* respond(e, textChunks(text), text)
+  }
   const defaultModel = adapter.defaultModel ? w.defaultModel : ''
   if (defaultModel && !isModel(defaultModel)) {
     const bad = `The via plugin's defaultModel setting ${JSON.stringify(defaultModel)} is not a ${adapter.name} --model pattern.`
-    return yield* respond(e, textChunks(bad), bad)
+    return yield* say(bad)
   }
   const asked = promptOf(turn.prompt, adapter)
   if (asked.help) {
     const help = helpOf(adapter, await cachedModels($, adapter, w.defaultModel))
-    return yield* respond(e, textChunks(help), help)
+    return yield* say(help)
   }
   if (asked.error !== undefined) {
     const bad = `${asked.error}\n\n${helpOf(adapter, await cachedModels($, adapter, w.defaultModel))}`
-    return yield* respond(e, textChunks(bad), bad)
+    return yield* say(bad)
   }
 
   const held = record.choice
@@ -230,7 +239,7 @@ async function* begin(
   // later message would be refused as well.
   if (merged.config && (mode === 'plan' || merged.tools === 'read' || record.rebuilt)) {
     const refused = `A read-only ${adapter.name} run takes no config lines: an option could loosen what read-only enforces. Start a new agent without \`tools: read\`, outside plan mode, to use them.`
-    return yield* respond(e, textChunks(refused), refused)
+    return yield* say(refused)
   }
   if (changed) await updateRecord(w, $, agentId, { choice: merged })
 
@@ -243,7 +252,7 @@ async function* begin(
     const refused = record.rebuilt
       ? `${adapter.name} cannot run read-only: it has no read-only mode that via can enforce. ${anyway}`
       : `${adapter.name} cannot run in plan mode: it has no read-only mode that via can enforce. Leave plan mode to run it, or ask a harness that can enforce read-only.`
-    return yield* respond(e, textChunks(refused), refused)
+    return yield* say(refused)
   }
   // Plan mode is read-only whatever tools line the prompt carries: a pi list such as `bash` would run commands.
   const chosen: Choice = mode === 'plan' ? { ...withModel, tools: adapter.tools?.[0] ?? 'read,grep,find,ls' } : withModel
@@ -256,15 +265,15 @@ async function* begin(
       found === 'unchecked'
         ? `${adapter.name} cannot run read-only here: this folder and those above it could not all be checked for ${unsafe.folder}, and ${unsafe.why}. ${anyway}`
         : `${adapter.name} cannot run read-only here: ${unsafe.why} (${found}). ${anyway}`
-    return yield* respond(e, textChunks(refused), refused)
+    return yield* say(refused)
   }
   const guard = chosen.tools === 'read' ? await readOnlyGuard($, adapter) : undefined
   if (typeof guard === 'string') {
     const refused = `${adapter.name} cannot run read-only here: ${guard}. ${anyway}`
-    return yield* respond(e, textChunks(refused), refused)
+    return yield* say(refused)
   }
   const ready = await relayReady(w, $, adapter, w.latest.has(adapter.name))
-  if (typeof ready === 'string') return yield* respond(e, textChunks(ready), ready)
+  if (typeof ready === 'string') return yield* say(ready)
   const early = adapter.probe && !adapter.probe.after ? probeModel($, adapter, chosen) : undefined
   const probe = (latest: string | undefined) => early ?? (latest ? probeModel($, adapter, chosen, latest) : Promise.resolve(undefined))
   // Only this run's answer may answer a later step that runs nothing: an aborted run leaves none.
