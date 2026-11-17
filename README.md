@@ -51,7 +51,7 @@ Ask in plain language: "Have codex review src/api". Optional lines at the top of
 | `config: <option>=<value>` | Codex and OpenCode: one of the harness's own options that tune its model, such as `fast-mode=on`; one per line, `fast-mode=` drops it. Never a mode or sandbox option, and none in a read-only run |
 | `via-help` | Lists the harness's options instead of running it |
 
-A message to a running Codex, OpenCode or pi agent reaches it at its next step; `interrupt:` first stops the current step. agy only takes follow-ups. A completed answer ends with the model the harness reports; one only taken from your `model:` line says `(requested)`, and a harness that won't say gets `model not reported`.
+A message to a running Codex, OpenCode or pi agent reaches it at its next step; `interrupt:` first stops the current step. That holds for Claude's SendMessage; one you type into the agent's view waits in Claude Code until the current step ends, so it can't cut a long command short. agy only takes follow-ups. A completed answer ends with the model the harness reports; one only taken from your `model:` line says `(requested)`, and a harness that won't say gets `model not reported`.
 
 ## Permissions
 
@@ -65,7 +65,7 @@ A message to a running Codex, OpenCode or pi agent reaches it at its next step; 
 
 Each loads its own user config and instructions files (agy reads your global `AGENTS.md`).
 
-- `codex`: an interrupted command can keep running until it finishes.
+- `codex`: an interrupted command keeps running until the run ends. A subagent's task shows as its nested agent's prompt with Codex's default subagent tools; with Codex's `multi_agent_v2` feature on, it [sends no task text](https://github.com/openai/codex/issues/61750).
 - `agy`: commands run in Antigravity's sandbox, away from credentials such as `~/.kube`; its own file edits are not sandboxed. Per its changelog, background tasks it starts, such as dev servers, outlive a headless run.
 - `opencode`: a read-only run replaces your own `OPENCODE_CONFIG_CONTENT`.
 - `pi`: any model pi reaches by API key or `/login`. On a ChatGPT login it runs pi's own tools, not Codex's sandbox. `tools:` takes a pi tool list: one of only `read`, `grep`, `find`, `ls` is read-only and skips the project's `.pi` extensions, even in a project you trusted; any other, such as `-bash,read`, can edit and loads them.
