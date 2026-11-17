@@ -1,8 +1,8 @@
 // What Codex tells a client about its own subagents, driven straight through `codex app-server` with the model a
 // local fake (support/fake-model.mts): no relay, no codex-acp, no tokens. This pins Codex's behaviour, not via's:
-// with multi_agent_v2, a subagent's spawn and follow-up reach the client with no text (openai/codex#61750), so a
-// nested Codex agent's view can't show what it was asked. Codex's default multi_agent tools do carry it, and
-// codex-acp reports it (real-codex.test.mts). When this fails, v2 sends the text too: check codex-acp shows it.
+// with the v2 subagent tools, a subagent's spawn and follow-up reach the client with no text (openai/codex#61750), so
+// a nested Codex agent's view can't show what it was asked. The v1 tools carry it, and codex-acp reports it
+// (real-codex.test.mts); the model picks which version runs. When this fails, v2 sends the text too: check codex-acp shows it.
 // Skipped when codex is not on PATH.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'

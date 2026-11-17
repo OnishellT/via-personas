@@ -65,7 +65,7 @@ A message to a running Codex, OpenCode or pi agent reaches it at its next step; 
 
 Each loads its own user config and instructions files (agy reads your global `AGENTS.md`).
 
-- `codex`: an interrupted command keeps running until the run ends. A subagent's task shows as its nested agent's prompt with Codex's default subagent tools; with Codex's `multi_agent_v2` feature on, it [sends no task text](https://github.com/openai/codex/issues/61750).
+- `codex`: an interrupted command keeps running until the run ends. A subagent's task shows as its nested agent's prompt only with Codex's v1 subagent tools. Codex lets the model pick, and gpt-6-luna picks the v2 tools. These [send no task text](https://github.com/openai/codex/issues/61750), so the nested agent gets its title instead.
 - `agy`: commands run in Antigravity's sandbox, away from credentials such as `~/.kube`; its own file edits are not sandboxed. Per its changelog, background tasks it starts, such as dev servers, outlive a headless run.
 - `opencode`: a read-only run replaces your own `OPENCODE_CONFIG_CONTENT`.
 - `pi`: any model pi reaches by API key or `/login`. On a ChatGPT login it runs pi's own tools, not Codex's sandbox. `tools:` takes a pi tool list: one of only `read`, `grep`, `find`, `ls` is read-only and skips the project's `.pi` extensions, even in a project you trusted; any other, such as `-bash,read`, can edit and loads them.
