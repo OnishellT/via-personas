@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.10.0](https://github.com/SeanLF/claude-code-subagent-harnesses/compare/via-v0.9.0...via-v0.10.0) (2026-11-17)
+
+
+### Features
+
+* **via:** a config line sets a harness's own session option, such as Codex's fast mode ([dc3e2aa](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/dc3e2aa0f24e73165dba5d3f40024e700dfbad7e))
+* **via:** a harness's questions reach you in Claude Code's own form ([4fad16c](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/4fad16cf569a221fae3520c8d9e995e46bfdd151))
+* **via:** Codex runs with full access in bypass mode, as Claude Code itself does ([c2c4466](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/c2c446632585bf40df8367a4b1d51815b9102719))
+* **via:** nested agents show thinking and plan updates, through the shared step writer ([#54](https://github.com/SeanLF/claude-code-subagent-harnesses/issues/54)) ([e0c5751](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/e0c5751567f16f54e2a0f0ab10a2855df9f94601))
+
+
+### Bug Fixes
+
+* **via:** a Codex subagent's task is its nested agent's prompt; a follow-up while it works is a row in its view ([761c3e0](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/761c3e09714d7ed479429cbd0a56842c4969c0c9))
+* **via:** a config line sets only options that tune the model, refusing the rest ([c8144fd](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/c8144fd9df435b1003e5d772a195738c8dee95ec))
+* **via:** a harness's images, audio, resources and links reach Claude as Claude Code words them ([e4f36d4](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/e4f36d440e47f02f08ca40ee5b0911e465237a13))
+* **via:** a harness's warning follows its answer, apart from it, not inside it ([828d81d](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/828d81de8b3bb0e3d724ab6dfe77369f0010d499))
+* **via:** a message to a subagent is said once it is whole, and its images are saved ([3e6f348](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/3e6f348bf8086673f939d2f90647dc8cb5144b6a))
+* **via:** a refused config line on an agent with no model-tuning options says so ([6b6cad5](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/6b6cad533eac3a2cc78b5cc35e1271803ee5018e))
+* **via:** a refused model, mode or config option keeps the harness's reason ([db3de22](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/db3de22347ed7115982ab440e4b17796bfd919ef))
+* **via:** a refused or limit-stopped ACP run says so instead of signing ([#53](https://github.com/SeanLF/claude-code-subagent-harnesses/issues/53)) ([7625232](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/7625232bc607668707df81b55a746641a9245db4))
+* **via:** a run that ends or is stopped closes its ACP session, for an agent that can close one ([f4a2655](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/f4a2655c094a02667a66e8f4771f63b48e968c79))
+* **via:** agy's tool steps are calls to the step tool, with their output; the dead status line goes ([d243076](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/d24307612c56b6bef407b4121c524d8e24ad4efa))
+* **via:** an auto-mode agent hands back what via says before running it ([daa3e84](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/daa3e848493cf4808551fbe93d9f4835eb2f323d))
+* **via:** Codex and OpenCode take the thinking levels each model offers, not via's lists ([12b8927](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/12b8927f408d04397c8ce4e0e294f02981e31e46))
+* **via:** Codex runs on codex-acp 2.7.0, not its preview ([3978d2e](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/3978d2e4aa7226ce0dd90eda611834e8e503c5ea))
+* **via:** hooks describe the harness types they read; a check keeps those copies honest ([#55](https://github.com/SeanLF/claude-code-subagent-harnesses/issues/55)) ([809b869](https://github.com/SeanLF/claude-code-subagent-harnesses/commit/809b8697800c4c8fd3c5fc17b091d701acaa518f))
+
 ## [0.9.0](https://github.com/SeanLF/claude-code-subagent-harnesses/compare/via-v0.8.1...via-v0.9.0) (2026-11-11)
 
 
