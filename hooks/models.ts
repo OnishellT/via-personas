@@ -22,14 +22,16 @@ export async function cachedModels(
 // A failed or empty listing keeps the last good one. Run from the home folder: in the project, opencode
 // would load the project's own plugins before any agent is asked for.
 export async function refreshModels($: Pick<EngineInterface, 'store' | 'process' | 'env' | 'fs'>, adapter: Adapter): Promise<void> {
+  const { catalogue } = adapter
+  if (!catalogue) return
   const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
   if (!home) return
-  const listed = await $.process.run([...adapter.catalogue.argv], { cwd: home, timeoutMs: 30_000 }).catch(() => undefined)
+  const listed = await $.process.run([...catalogue.argv], { cwd: home, timeoutMs: 30_000 }).catch(() => undefined)
   if (listed?.exitCode !== 0) return
-  const { preferred } = adapter.catalogue
+  const { preferred } = catalogue
   const settings = preferred ? await $.fs.read(`${home}/${preferred.file}`).catch(() => undefined) : undefined
   const first = preferred && typeof settings === 'string' ? preferred.pick(settings) : undefined
   // The text rides on every request in the agent's description: model ids only.
-  const ids = [...new Set([...(first ? [first] : []), ...adapter.catalogue.ids(listed.stdout)].filter(isModel))]
+  const ids = [...new Set([...(first ? [first] : []), ...catalogue.ids(listed.stdout)].filter(isModel))]
   if (ids.length > 0) await $.store.set(key(adapter), ids)
 }

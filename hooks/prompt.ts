@@ -83,6 +83,7 @@ export function promptOf(text: string, adapter: PromptAdapter): PromptSpec {
         return bad(`${label} must be one of ${adapter.tools.join(', ')}; got ${JSON.stringify(value)}.`)
       asked.tools ??= value
     } else {
+      if (adapter.modelFixed) return bad(`${label} is not supported: ${adapter.name} runs on its own global default model.`)
       asked.model ??= value
     }
   }
@@ -98,7 +99,9 @@ export function helpOf(adapter: HelpAdapter, models: readonly string[]): string 
   const offered = shown.length > 0 ? ` ${name} offers ${shown.join(', ')}${more}.` : ''
   const lines = [
     `${name} prompt lines: put them at the top of the prompt, one per line, before the task. Each holds for this agent's later messages until a new line replaces it.`,
-    `model: <pattern>    passed to ${adapter.bin} as its model.${offered}${adapter.models ? ` ${adapter.models}` : ''}`,
+    adapter.modelFixed
+      ? `model:              refused: ${name} runs on its own global default model.`
+      : `model: <pattern>    passed to ${adapter.bin} as its model.${offered}${adapter.models ? ` ${adapter.models}` : ''}`,
   ]
   if (adapter.readOnly === 'none') lines.push(`tools:              refused: ${name} cannot enforce read-only tools.`)
   else if (adapter.tools)
@@ -119,9 +122,11 @@ export function helpOf(adapter: HelpAdapter, models: readonly string[]): string 
       `config: <id>=<v>    one of ${name}'s own options that tune its model, such as fast-mode=on; one per line. Any other, such as a mode, is refused; one the model does not offer is skipped with a warning naming those it does; <id>= drops a held one; a read-only run takes none.`,
     )
   lines.push(
-    adapter.defaultModel
-      ? `Model precedence: a model line, then the plugin's defaultModel setting, then ${name}'s own default.`
-      : `Model precedence: a model line, then ${name}'s own default.`,
+    adapter.modelFixed
+      ? `${name} runs on its own global default model.`
+      : adapter.defaultModel
+        ? `Model precedence: a model line, then the plugin's defaultModel setting, then ${name}'s own default.`
+        : `Model precedence: a model line, then ${name}'s own default.`,
   )
   lines.push(
     adapter.steer
@@ -141,7 +146,8 @@ export function descriptionOf(adapter: HelpAdapter, models: readonly string[]): 
   if (adapter.readOnly !== 'none') top.push('`tools: read`')
   if (adapter.thinking.length > 0) top.push('`thinking: high`')
   const steer = adapter.steer ? ' SendMessage steers it mid-run; one starting `interrupt:` stops its current step first.' : ''
-  return `${adapter.about} Top lines: ${top.join(' ')}. \`crew-help\` for more.${steer}`
+  const lines = top.length > 0 ? ` Top lines: ${top.join(' ')}.` : ''
+  return `${adapter.about}${lines} \`crew-help\` for more.${steer}`
 }
 
 // The offered models closest to one a harness refused, by shared name parts (deepseek, v4, free).

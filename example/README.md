@@ -1,8 +1,8 @@
 # crew personas example
 
-A test project with one persona, `.agents/agents/scout.md`: it runs in Pi, read-only (`read, grep, find, ls`), and always ends its answer with the line `-- scout (pi persona) MARKER-7Q2`.
+A test project with a Pi persona and a ZCode persona (`zscout`, ending `-- zscout (zcode persona) MARKER-Z9K`). The Pi persona is `.agents/agents/scout.md`: it runs in Pi, read-only (`read, grep, find, ls`), and always ends its answer with the line `-- scout (pi persona) MARKER-7Q2`.
 
-Needs `pi` on PATH, signed in.
+Needs `pi` (for `scout`) and `zcode` (for `zscout`) on PATH, signed in. Each persona only shows up when its harness is installed.
 
 From this folder (`example/`), run:
 
