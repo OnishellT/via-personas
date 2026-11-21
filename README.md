@@ -81,6 +81,8 @@ Ask in plain language: "Have codex review src/api". Optional lines at the top of
 | `config: <option>=<value>` | Codex and OpenCode: one of the harness's own options that tune its model, such as `fast-mode=on`; one per line, `fast-mode=` drops it. Never a mode or sandbox option, and none in a read-only run |
 | `crew-help` | Lists the harness's options instead of running it |
 
+At session start Crew adds a short **crew guide** to Claude's context (about 660 tokens, built from the cached model lists, so it costs no wait): how to spawn `crew:<harness>` and `crew:<persona>`, the lines above, two models per harness, the default model of pi, codex and ZCode (read from their own settings; the plugin's `defaultModel` setting wins for pi), a plain "its own pick" for agy and opencode, which have no setting to read, and the personas of the folder. Only installed harnesses are listed. `crew-help` is a prompt you send to an agent type, not a shell command.
+
 A message to a running Codex, OpenCode or pi agent reaches it at its next step; `interrupt:` first stops the current step. That holds for Claude's SendMessage; one you type into the agent's view waits in Claude Code until the current step ends, so it can't cut a long command short. agy only takes follow-ups. A completed answer ends with the model the harness reports; one only taken from your `model:` line says `(requested)`, and a harness that won't say gets `model not reported`.
 
 ## Permissions

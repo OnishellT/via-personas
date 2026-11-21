@@ -54,6 +54,7 @@ export const opencode = {
   steer: true,
   defaultModel: false,
   models: 'opencode models lists them.',
+  listing: 'opencode models',
   relay: {},
   // Tested live: a plugin there ran with OPENCODE_DISABLE_PROJECT_CONFIG, --pure, OPENCODE_PURE,
   // and from a subfolder, so no setting makes a run in such a project read-only.

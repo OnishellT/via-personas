@@ -37,11 +37,25 @@ function codexConfig(guard: Readonly<Record<string, string>> | undefined, person
   return { CODEX_CONFIG: JSON.stringify({ ...(isRecord(held) ? held : {}), developer_instructions: persona.body }) }
 }
 
+// What codex runs with no model line: the top-level `model` of its config, before the first table.
+const configDefault = {
+  file: '.codex/config.toml',
+  pick: (text: string) => {
+    for (const line of text.split('\n')) {
+      if (line.trimStart().startsWith('[')) return undefined
+      const m = /^\s*model\s*=\s*"([^"\s]+)"/.exec(line)
+      if (m) return m[1]
+    }
+    return undefined
+  },
+}
+
 export const codex = {
   name: 'codex',
   bin: 'codex',
   about: "Codex CLI agent: OpenAI's models, own tools in Codex's sandbox (none in bypass mode); asks you before going past it.",
   // The models Codex's own picker lists, best first; hidden ones are internal.
+  configured: configDefault,
   catalogue: {
     argv: ['codex', 'debug', 'models'],
     ids: (stdout: string) => {
@@ -56,6 +70,7 @@ export const codex = {
       }
     },
   },
+  listing: 'codex debug models',
   readOnly: 'enforced',
   tools: ['read', 'write'], // write: the same as no tools line, which an agent may not think to leave out
   thinking: 'offered',

@@ -32,6 +32,13 @@ export type Adapter = {
   readonly modelFixed?: true // runs on the harness's own global default: a model line, or a persona's harness-model, is refused
   readonly persona?: true // takes a persona (start's `persona`): by its system-prompt channel, or as a block on a session's first prompt
   readonly models?: string
+  // The crew guide's short way to the harness's full model list, where it is not the first word of its help.
+  readonly listing?: string
+  readonly note?: string // one clause for the crew guide, on what the model ids mean
+  readonly known?: readonly string[] // model values that always work, for a harness that lists none (cursor's default[])
+  // Where the harness keeps the model it runs when no model is asked for, a file under home: the crew guide
+  // names it, so a host can answer "use <model> on <harness>" and knows what a run with no model line uses.
+  readonly configured?: { readonly file: string; pick(text: string): string | undefined }
   // A folder that voids read-only when found in the working folder or any folder above it, unless
   // it holds only the `harmless` entries: the harness loads code from it before any permission applies.
   // own: the person's own ~/<folder> is their config, not a project's, and does not count.
@@ -79,3 +86,4 @@ export type Adapter = {
 
 export type PromptAdapter = Pick<Adapter, 'name' | 'readOnly' | 'thinking' | 'tools' | 'options' | 'modelFixed'>
 export type HelpAdapter = PromptAdapter & Pick<Adapter, 'bin' | 'about' | 'steer' | 'defaultModel' | 'models'>
+export type GuideAdapter = HelpAdapter & Pick<Adapter, 'listing' | 'known' | 'configured' | 'note'>
