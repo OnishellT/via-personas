@@ -1,7 +1,7 @@
 import type { EngineInterface, StreamHook, TurnStepChunk, TurnStepResult } from 'claude-code'
 import type { Choice } from '../types'
 import { endJob, type Job, type Mark, pump } from './acp/steps'
-import type { Adapter, Mode } from './adapter'
+import type { Adapter, Delivery, Mode } from './adapter'
 import { childRun } from './children'
 import { deliver, HANDBACK_TOOL, handbackAsked, respond, textChunks } from './handback'
 import { relayReady } from './install'
@@ -313,7 +313,7 @@ async function* begin(
       chosen,
       mode,
       installed: ready.installed,
-      persona: persona?.body,
+      persona: persona ? { name: persona.name, body: persona.body } : undefined,
       guard,
       probe,
       signal: abort.signal,
@@ -332,7 +332,7 @@ type Drive = {
   chosen: Choice
   mode: Mode
   installed: string | undefined
-  persona: string | undefined
+  persona: Delivery | undefined
   guard: Readonly<Record<string, string>> | undefined
   probe: (latest: string | undefined) => Promise<string | undefined>
   signal: AbortSignal
@@ -347,6 +347,8 @@ async function* drive(w: World, $: EngineInterface, d: Drive): AsyncGenerator<Tu
   // An interrupted run is followed at once by its message, on the same session.
   for (;;) {
     const session = record.session
+    // The persona's block is due until a run has opened this very session with it.
+    const fresh = persona !== undefined && (!session || record.delivered !== session)
     const inbox = adapter.steer ? await openInbox($, adapter.name, agentId, w.inboxes) : undefined
     result = yield* run(w, adapter, $, {
       agentId,
@@ -357,7 +359,7 @@ async function* drive(w: World, $: EngineInterface, d: Drive): AsyncGenerator<Tu
       session,
       mode,
       installed,
-      persona,
+      persona: persona && { ...persona, fresh },
       models,
       block,
       guard,
@@ -367,6 +369,7 @@ async function* drive(w: World, $: EngineInterface, d: Drive): AsyncGenerator<Tu
         if (id !== session) await updateRecord(w, $, agentId, { session: id })
       },
     })
+    if (fresh && result.answered) await updateRecord(w, $, agentId, { delivered: result.answered })
     if (result.next === undefined) break
     if (signal.aborted) return yield* respond(e, [{ kind: 'stop', stopReason: 'end_turn', usage: null }], '')
     prompt = result.next

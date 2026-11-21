@@ -2,7 +2,7 @@ import type { Choice } from '../../types'
 import { relayEvents, sessionLost } from '../acp/events'
 import { isRecord } from '../acp/json'
 import { type AcpMode, type AcpSpec, acpMode, acpStart } from '../acp/spec'
-import type { Adapter, Mode } from '../adapter'
+import type { Adapter, Delivery, Mode } from '../adapter'
 
 // Read-only is the one mode via defends. Otherwise codex works in its workspace sandbox and asks before
 // going past it, as codex exec did; the question reaches the person, except in dontAsk (denied). Bypass
@@ -27,6 +27,14 @@ export const CODEX: AcpSpec = {
 
 export function codexMode(choice: Choice, mode: Mode): AcpMode {
   return acpMode(CODEX, choice.tools === 'read', mode)
+}
+
+// codex-acp merges CODEX_CONFIG into each session's config. The persona rides in it as developer_instructions,
+// Codex's own channel for them, on every run, beside the read-only guard's.
+function codexConfig(guard: Readonly<Record<string, string>> | undefined, persona: Delivery | undefined): Record<string, string> {
+  if (!persona) return {}
+  const held: unknown = guard?.CODEX_CONFIG ? JSON.parse(guard.CODEX_CONFIG) : {}
+  return { CODEX_CONFIG: JSON.stringify({ ...(isRecord(held) ? held : {}), developer_instructions: persona.body }) }
 }
 
 export const codex = {
@@ -91,7 +99,8 @@ export const codex = {
       }
     },
   },
-  start: ({ choice, prompt, session, root, inbox, files, guard, mode, installed }) => {
+  persona: true,
+  start: ({ choice, prompt, session, root, inbox, files, guard, mode, installed, persona }) => {
     const readOnly = codexMode(choice, mode).agentMode === 'read-only'
     // Fail closed: without the guard, MCP servers would run outside the read-only sandbox.
     if (readOnly && guard === undefined) throw new Error('codex cannot prove read-only without its MCP guard')
@@ -108,7 +117,7 @@ export const codex = {
       thinking: choice.thinking,
       options: choice.config,
       command: ['node', installed],
-      ...(readOnly ? { env: guard } : {}),
+      ...(readOnly || persona ? { env: { ...(readOnly ? guard : {}), ...codexConfig(guard, persona) } } : {}),
     })
   },
   events: () => relayEvents('codex'),

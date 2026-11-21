@@ -2,6 +2,7 @@ import type { Choice } from '../../types'
 import { relayEvents, sessionLost } from '../acp/events'
 import { type AcpSpec, acpMode, acpStart, type Policy } from '../acp/spec'
 import type { Adapter, Mode } from '../adapter'
+import { withPersonaBlock } from '../deliver'
 
 // Read-only is a deny-by-default agent: opencode removes denied tools from what the model is offered
 // (tested live). Its own plan agent allows bash, so it is not read-only. A repository's opencode.json
@@ -64,7 +65,8 @@ export const opencode = {
     harmless: ['bin', '.gitignore'],
     why: 'opencode loads plugins, tools and config from .opencode on every run, before any permission applies',
   },
-  start: ({ choice, prompt, session, root, inbox, files, mode, agentId }) => {
+  persona: true,
+  start: ({ choice, prompt, session, root, inbox, files, mode, agentId, persona }) => {
     const run = opencodeRun(choice, mode, agentId)
     // The read agent replaces the person's own OPENCODE_CONFIG_CONTENT for a read-only run.
     const injected: Record<string, string> = run.agent
@@ -72,7 +74,7 @@ export const opencode = {
       : {}
     return acpStart(OPENCODE, {
       root,
-      prompt,
+      prompt: withPersonaBlock(prompt, persona),
       readOnly: choice.tools === 'read',
       mode,
       inbox,
