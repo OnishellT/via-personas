@@ -15,7 +15,8 @@ export type Adapter = {
   readonly about: string // the agent type's one-line description starts with it
   // How the harness lists the models this person can use, in its own order. preferred: the harness's
   // configured default, from a file under home, put first when its list does not lead with it.
-  readonly catalogue: {
+  // Absent: the harness lists no models (modelFixed), so there is nothing to read.
+  readonly catalogue?: {
     readonly argv: readonly string[]
     ids(stdout: string): string[]
     readonly preferred?: { readonly file: string; pick(text: string): string | undefined }
@@ -28,6 +29,7 @@ export type Adapter = {
   readonly options?: true // takes config lines: options of its ACP session, which the relay checks
   readonly steer: boolean
   readonly defaultModel: boolean // takes the plugin's defaultModel setting
+  readonly modelFixed?: true // runs on the harness's own global default: a model line, or a persona's harness-model, is refused
   readonly persona?: true // takes a persona (start's `persona`): by its system-prompt channel, or as a block on a session's first prompt
   readonly models?: string
   // A folder that voids read-only when found in the working folder or any folder above it, unless
@@ -75,5 +77,5 @@ export type Adapter = {
   failure?(exit: ProcessSpawnResult, stderr: string): { message: string; sessionLost?: boolean } | undefined
 }
 
-export type PromptAdapter = Pick<Adapter, 'name' | 'readOnly' | 'thinking' | 'tools' | 'options'>
+export type PromptAdapter = Pick<Adapter, 'name' | 'readOnly' | 'thinking' | 'tools' | 'options' | 'modelFixed'>
 export type HelpAdapter = PromptAdapter & Pick<Adapter, 'bin' | 'about' | 'steer' | 'defaultModel' | 'models'>

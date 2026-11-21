@@ -4,7 +4,7 @@
 
 `crew` is a fork of [via](https://github.com/SeanLF/claude-code-subagent-harnesses) by Sean Floyd (MIT, licence kept), renamed `via` to `crew` (plugin, marketplace, step tool `mcp__plugin_crew_step__step`, data dir `~/.claude/crew/`). Everything below this section is upstream's, with the name changed.
 
-What this fork adds: **personas**. A file `.agents/agents/<name>.md` in the session's folder, with `name`, `description`, `harness: pi`, `codex`, `opencode`, `agy` or `cursor` and optionally `harness-model`, `tools`, `thinking` in its frontmatter and the instructions as its body, becomes the agent type `crew:<name>`. The host spawns it like any subagent; its harness gets the instructions through its own system-prompt channel when it has one (pi: `--append-system-prompt`, codex: `developer_instructions`, on every run, follow-ups included); opencode, agy and cursor get them as a `<persona name="…">…</persona>` block at the start of the session's first prompt, not repeated on follow-ups. `harness-model`, `tools` and `thinking` are defaults that a `model:`, `tools:` or `thinking:` prompt line overrides. The per-harness types (`crew:pi`, `crew:codex`, ...) work as before. Try it in [example/](example/README.md).
+What this fork adds: **personas**. A file `.agents/agents/<name>.md` in the session's folder, with `name`, `description`, `harness: pi`, `codex`, `opencode`, `agy`, `cursor` or `zcode` and optionally `harness-model`, `tools`, `thinking` in its frontmatter and the instructions as its body, becomes the agent type `crew:<name>`. The host spawns it like any subagent; its harness gets the instructions through its own system-prompt channel when it has one (pi: `--append-system-prompt`, codex: `developer_instructions`, on every run, follow-ups included); opencode, agy, cursor and zcode get them as a `<persona name="…">…</persona>` block at the start of the session's first prompt, not repeated on follow-ups. `harness-model`, `tools` and `thinking` are defaults that a `model:`, `tools:` or `thinking:` prompt line overrides. The per-harness types (`crew:pi`, `crew:codex`, ...) work as before. Try it in [example/](example/README.md).
 
 `/plugin install crew --marketplace OnishellT/via-personas`
 
@@ -22,7 +22,7 @@ Claude hands a task to Codex, Antigravity, OpenCode or pi, and each runs it thro
 claude plugin install crew --marketplace OnishellT/via-personas
 ```
 
-Needs Node 22.18 or later on PATH; Codex also needs npm. Install at least one harness: [Codex](https://github.com/openai/codex), [Antigravity CLI](https://github.com/google-antigravity/antigravity-cli), [OpenCode](https://opencode.ai), [Cursor](https://cursor.com/cli) (`cursor-agent`) or [pi](https://pi.dev). Your agent can run the installs; signing in opens a browser, so that part is yours. Restart Claude Code afterwards, and again after adding another harness, so it sees what's on your PATH. Tested on macOS, CI also runs on Linux; Windows is untested.
+Needs Node 22.18 or later on PATH; Codex also needs npm. Install at least one harness: [Codex](https://github.com/openai/codex), [Antigravity CLI](https://github.com/google-antigravity/antigravity-cli), [OpenCode](https://opencode.ai), [Cursor](https://cursor.com/cli) (`cursor-agent`), [pi](https://pi.dev) or ZCode (`zcode`). Your agent can run the installs; signing in opens a browser, so that part is yours. Restart Claude Code afterwards, and again after adding another harness, so it sees what's on your PATH. Tested on macOS, CI also runs on Linux; Windows is untested.
 
 ## Who it's for
 
@@ -45,7 +45,7 @@ Pairs with OpenAI's [codex-plugin-cc](https://github.com/openai/codex-plugin-cc)
 - The same fix on two models, to see which one is good enough.
 
 > [!IMPORTANT]
-> - Each harness runs its own tools as you, with its own permission settings, outside Claude Code's. The one thing `via` enforces is read-only: plan mode, or `tools: read` at the top of the prompt. Codex, OpenCode and pi then can't write. agy and cursor have no enforceable read-only mode, so `via` won't run them in one.
+> - Each harness runs its own tools as you, with its own permission settings, outside Claude Code's. The one thing `via` enforces is read-only: plan mode, or `tools: read` at the top of the prompt. Codex, OpenCode and pi then can't write. agy, cursor and zcode have no enforceable read-only mode, so `via` won't run them in one. zcode runs on its own global default model: a `model:` line is refused.
 > - Outside read-only, a repository's `.codex`, `.opencode` and `.pi` config loads, as if you had trusted it. In a repository you didn't write, use `tools: read`. Codex and OpenCode then won't run at all in a repository that has its own `.codex` or `.opencode` folder.
 > - pi and OpenCode are third-party clients. A subscription login there is subject to that provider's rules for third-party clients.
 
