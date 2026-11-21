@@ -13,6 +13,7 @@ const BLURB = 60 // characters of a persona's description
 export type GuideHarness = {
   adapter: GuideAdapter
   models: readonly string[] // the harness's cached list, best first
+  fallback?: string // the harness's configured default, when its cached list leads with it (pi)
   configured?: string // the model a fixed harness runs, read from its own settings
 }
 export type GuidePersona = { name: string; harness: string; description: string }
@@ -22,7 +23,7 @@ const clip = (text: string, max: number) => {
   return one.length > max ? `${one.slice(0, max - 1)}…` : one
 }
 
-function harnessLine({ adapter, models, configured }: GuideHarness): string {
+function harnessLine({ adapter, models, configured, fallback }: GuideHarness): string {
   const name = adapter.name
   const lines: string[] = []
   if (adapter.modelFixed) lines.push(`runs on ${configured ?? 'its own default model'} (no model line)`)
@@ -36,8 +37,10 @@ function harnessLine({ adapter, models, configured }: GuideHarness): string {
     const rest = adapter.listing ?? `send it \`crew-help\``
     lines.push(
       shown.length > 0
-        ? `models ${shown.join(', ')}${more > 0 ? ` (+${more} more: ${rest})` : ` (all: ${rest})`}`
-        : `models not cached yet (list: ${rest})`,
+        ? `${fallback ? `default ${fallback}; ` : ''}models ${shown.join(', ')}${more > 0 ? ` (+${more} more: ${rest})` : ` (all: ${rest})`}`
+        : adapter.known
+          ? `model ${adapter.known.join(', ')} is the one set in the harness; others: ${rest}`
+          : `models not cached yet (list: ${rest})`,
     )
   }
   if (adapter.thinking === 'offered') lines.push('thinking: any the model offers')
@@ -82,10 +85,14 @@ export async function crewGuide(
       const { configured } = adapter
       const text = configured && home ? await $.fs.read(`${home}/${configured.file}`).catch(() => undefined) : undefined
       const model = configured && typeof text === 'string' ? configured.pick(text) : undefined
+      const cached = await cachedModels($, adapter, world.defaultModel).catch(() => [])
+      // pi's list leads with the model its settings choose, so its first is the one a run with no model line uses.
+      const fallback = adapter.name === 'pi' && cached.length > 0 ? cached[0] : undefined
       return {
         adapter,
-        models: await cachedModels($, adapter, world.defaultModel).catch(() => []),
+        models: cached,
         ...(model ? { configured: model } : {}),
+        ...(fallback ? { fallback } : {}),
       }
     }),
   )

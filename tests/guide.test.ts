@@ -85,11 +85,24 @@ test('each harness line says what it refuses, from its adapter', () => {
   expect(line('agy')).toContain('no tools line (no read-only)')
   expect(line('zcode')).toContain('no thinking line')
   expect(line('cursor')).toContain('no thinking line')
-  expect(line('cursor')).toContain('crew-help')
+  expect(line('cursor')).toContain('model default[] is the one set in the harness; others: send it `crew-help`')
+  expect(line('agy')).not.toContain('default ')
   expect(line('codex')).toContain('takes config:')
   expect(line('codex')).not.toContain('no tools line')
   expect(line('pi')).not.toContain('no interrupt:')
   expect(line('agy')).toContain('no interrupt:')
+})
+
+test('pi names the model it runs with no model line, the first of its list; the others never invent one', () => {
+  const guide = guideOf(
+    [
+      { adapter: pi, models: ['openrouter/kimi', 'openrouter/glm'], fallback: 'openrouter/kimi' },
+      { adapter: agy, models: ['a-low'] },
+    ],
+    [],
+  )
+  expect(guide).toContain('- pi: default openrouter/kimi; models openrouter/kimi, openrouter/glm')
+  expect(guide).not.toContain('default a-low')
 })
 
 test('the guide says crew-help is a prompt, not a shell command, and every description words it so too', () => {
@@ -165,7 +178,7 @@ test('session start adds the guide as context for the installed harnesses only, 
   })
   const guide = await guideOfSession($)
   expect(guide.match(/^- \w+: /gm)).toEqual(['- pi: ', '- agy: ', '- zcode: '])
-  expect(guide).toContain('- pi: models openrouter/kimi, openrouter/glm (all: pi --list-models <search>)')
+  expect(guide).toContain('- pi: default openrouter/kimi; models openrouter/kimi, openrouter/glm (all: pi --list-models <search>)')
   expect(guide).toContain('- agy: models gemini-4-neon-low (all: agy models)')
   expect(guide).toContain('- zcode: runs on deepseek/deepseek-v4.1-flash (no model line)')
   expect(guide).not.toContain('codex')
