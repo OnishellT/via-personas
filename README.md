@@ -4,9 +4,28 @@
 
 `crew` is a fork of [via](https://github.com/SeanLF/claude-code-subagent-harnesses) by Sean Floyd (MIT, licence kept), renamed `via` to `crew` (plugin, marketplace, step tool `mcp__plugin_crew_step__step`, data dir `~/.claude/crew/`). Everything below this section is upstream's, with the name changed.
 
-What this fork adds: **personas**. A file `.agents/agents/<name>.md` in the session's folder, with `name`, `description`, `harness: pi`, `codex`, `opencode`, `agy`, `cursor` or `zcode` and optionally `harness-model`, `tools`, `thinking` in its frontmatter and the instructions as its body, becomes the agent type `crew:<name>`. The host spawns it like any subagent; its harness gets the instructions through its own system-prompt channel when it has one (pi: `--append-system-prompt`, codex: `developer_instructions`, on every run, follow-ups included); opencode, agy, cursor and zcode get them as a `<persona name="…">…</persona>` block at the start of the session's first prompt, not repeated on follow-ups. `harness-model`, `tools` and `thinking` are defaults that a `model:`, `tools:` or `thinking:` prompt line overrides. The per-harness types (`crew:pi`, `crew:codex`, ...) work as before. Try it in [example/](example/README.md).
+What this fork adds: **personas**. A file `.agents/agents/<name>.md` in the session's folder, with `name`, `description`, `harness: pi`, `codex`, `opencode`, `agy`, `cursor` or `zcode` and optionally `harness-model`, `tools`, `thinking` in its frontmatter and the instructions as its body, becomes the agent type `crew:<name>`. The host spawns it like any subagent; its harness gets the instructions through its own system-prompt channel when it has one (pi: `--append-system-prompt`, codex: `developer_instructions`, on every run, follow-ups included); opencode, agy, cursor and zcode get them as a `<persona name="…">…</persona>` block at the start of the session's first prompt, not repeated on follow-ups. `harness-model`, `tools` and `thinking` are defaults that a `model:`, `tools:` or `thinking:` prompt line overrides. The per-harness types (`crew:pi`, `crew:codex`, ...) work as before. Try it in [example/](example/README.md), which has one persona per harness, each with its own marker.
 
-`/plugin install crew --marketplace OnishellT/via-personas`
+### Personas and generic subagents
+
+Each installed harness has a **generic foreign subagent**, `crew:pi`, `crew:codex`, `crew:opencode`, `crew:agy`, `crew:cursor` and `crew:zcode`. It has no persona and just follows the host's prompt. A **persona** is optional: it adds `crew:<name>` next to the generic type, running on the harness the persona names. A persona's name can't equal a harness name.
+
+| Harness | How the persona reaches it |
+| --- | --- |
+| pi | `--append-system-prompt`, on every run |
+| codex | `developer_instructions`, on every request |
+| opencode, agy, cursor, zcode | a `<persona name="…">…</persona>` block at the start of the session's first prompt, not repeated on follow-ups |
+
+A persona with a non-`claude` harness gets no `.claude/agents` link, so Claude never also runs it natively.
+
+## Install
+
+```
+claude plugin marketplace add OnishellT/via-personas
+claude plugin install crew@crew --scope project
+```
+
+(`/plugin install crew@crew` inside Claude Code does the same.)
 
 # via (upstream README)
 
@@ -16,10 +35,11 @@ Claude hands a task to Codex, Antigravity, OpenCode or pi, and each runs it thro
 
 ## Set up
 
-`/plugin install crew --marketplace OnishellT/via-personas` in Claude Code, or from a shell:
+`/plugin marketplace add OnishellT/via-personas`, then `/plugin install crew@crew` in Claude Code, or from a shell:
 
 ```
-claude plugin install crew --marketplace OnishellT/via-personas
+claude plugin marketplace add OnishellT/via-personas
+claude plugin install crew@crew
 ```
 
 Needs Node 22.18 or later on PATH; Codex also needs npm. Install at least one harness: [Codex](https://github.com/openai/codex), [Antigravity CLI](https://github.com/google-antigravity/antigravity-cli), [OpenCode](https://opencode.ai), [Cursor](https://cursor.com/cli) (`cursor-agent`), [pi](https://pi.dev) or ZCode (`zcode`). Your agent can run the installs; signing in opens a browser, so that part is yours. Restart Claude Code afterwards, and again after adding another harness, so it sees what's on your PATH. Tested on macOS, CI also runs on Linux; Windows is untested.
