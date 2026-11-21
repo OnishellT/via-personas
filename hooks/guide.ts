@@ -6,8 +6,8 @@ import { isForeign, loadPersonas, refusal } from './personas'
 import { isModel } from './prompt'
 
 // The crew guide: what the host needs to use every foreign subagent from its first turn, with no lookup.
-// It rides in the context of every session, so it is short: about 600 tokens with all six harnesses.
-// Measured on a real session: 1500 characters were 640 tokens, 2.3 characters a token, because ids and punctuation
+// It rides in the context of every session, so it is short: about 660 tokens with all six harnesses (ADR 0010: accepted).
+// Measured on a real session: 1540 characters were 663 tokens, 2.3 characters a token, because ids and punctuation
 // are dense. Do not grow the text without measuring it again (compare the input tokens of two sessions).
 const SHOWN = 2 // models named per harness; the harness's own command lists the rest
 const SPACE = 64 // characters of model ids per harness: pi and opencode ids are long, and the guide stays short
