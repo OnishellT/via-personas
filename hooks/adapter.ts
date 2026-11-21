@@ -24,6 +24,7 @@ export type Adapter = {
   readonly options?: true // takes config lines: options of its ACP session, which the relay checks
   readonly steer: boolean
   readonly defaultModel: boolean // takes the plugin's defaultModel setting
+  readonly persona?: true // takes a persona's instructions as its system prompt (start's `persona`)
   readonly models?: string
   // A folder that voids read-only when found in the working folder or any folder above it, unless
   // it holds only the `harmless` entries: the harness loads code from it before any permission applies.
@@ -53,6 +54,7 @@ export type Adapter = {
     guard?: Readonly<Record<string, string>>
     mode: Mode
     installed?: string
+    persona?: string // the persona's instructions, on every run of its agent
   }): ProcessSpawnRequest
   // A parser per run: message boundaries can depend on earlier lines, and session is what the run asked to resume.
   events(session: string | undefined): (line: string) => Norm[]

@@ -112,7 +112,8 @@ export const pi = {
   thinking: THINKING,
   steer: true,
   defaultModel: true,
-  start: ({ choice, prompt, agentId, root, inbox }) => ({
+  persona: true,
+  start: ({ choice, prompt, agentId, root, inbox, persona }) => ({
     argv: [
       'pi',
       '-p',
@@ -125,6 +126,7 @@ export const pi = {
       ...(choice.model ? ['--model', choice.model] : []),
       ...(choice.tools ? ['--tools', choice.tools, ...(readsOnly(choice.tools) ? ['-na'] : [])] : []),
       ...(choice.thinking ? ['--thinking', choice.thinking] : []),
+      ...(persona ? ['--append-system-prompt', persona] : []),
     ],
     env: { PI_INBOX: inbox ?? '' },
     input: prompt,

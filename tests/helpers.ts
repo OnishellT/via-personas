@@ -166,6 +166,7 @@ export function testWorld(given: Partial<World> = {}): World {
   return {
     adapters: new Map(),
     defaultModel: '',
+    personas: new Map(),
     latest: new Set(),
     timeoutMinutes: 30,
     turns: new Map(),

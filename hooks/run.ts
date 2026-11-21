@@ -32,6 +32,7 @@ export type RunInput = {
   guard: Readonly<Record<string, string>> | undefined
   mode: Mode
   installed?: string
+  persona?: string // the persona's instructions, passed to the harness on every run
   models?: readonly string[] // the harness's offered models, for a refused model's nearest
   // Awaited only to sign, so a probe never delays the run or outlives an interrupted one.
   probe(session: string | undefined): Promise<string | undefined>
@@ -159,7 +160,7 @@ export async function* run(
   w: World,
   adapter: Adapter,
   $: Pick<EngineInterface, 'process' | 'clock' | 'plugin' | 'fs' | 'env' | 'ui'>,
-  { agentId, choice, prompt, signal, inbox, session, block = 0, guard, mode, installed, models = [], probe, save }: RunInput,
+  { agentId, choice, prompt, signal, inbox, session, block = 0, guard, mode, installed, persona, models = [], probe, save }: RunInput,
 ): AsyncGenerator<TurnStepChunk | Mark, RunResult> {
   const request = adapter.start({
     choice,
@@ -172,6 +173,7 @@ export async function* run(
     guard,
     mode,
     installed,
+    persona,
   })
   const s: RunState = {
     writer: new StepWriter(block),

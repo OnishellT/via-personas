@@ -6,6 +6,7 @@ import type { Choice } from '../types'
 // memory, and $.state only survives a reload of the plugin's code.
 export type AgentRecord = {
   harness: string
+  persona?: string // the persona this agent runs, by name: its instructions ride on every run of the harness
   nested?: true // a harness's own subagent: only its parent's run can answer it
   handback: boolean // spawned locally in auto mode: its answer goes back as a SubagentHandback
   mode: string // Claude Code's permission mode at the spawn

@@ -6,6 +6,7 @@ import { waitChild, woken } from './children'
 import { respond, textChunks } from './handback'
 import { HARNESSES } from './harnesses'
 import { cachedModels, refreshModels } from './models'
+import { checked, loadPersonas, resolveType } from './personas'
 import { descriptionOf, isModel, promptOf } from './prompt'
 import { createRecord, recordOf, updateRecord } from './record'
 import { notActivePrompt } from './run'
@@ -97,10 +98,11 @@ async function sizeWindow($: Pick<EngineInterface, 'env'>, main: string): Promis
 }
 
 // What the run will ask for, as turn.ts chooses it; the harness's own default is unknown until it answers.
-function choiceOf(world: World, adapter: Adapter, prompt: string): { model?: string; thinking?: string } {
+function choiceOf(world: World, adapter: Adapter, prompt: string, persona?: string): { model?: string; thinking?: string } {
   const asked = promptOf(unwrapped(prompt), adapter)
+  const given = persona === undefined ? undefined : world.personas.get(persona)
   const fallback = adapter.defaultModel && isModel(world.defaultModel) ? world.defaultModel : undefined
-  return { model: asked.model ?? fallback, thinking: asked.thinking }
+  return { model: asked.model ?? given?.model ?? fallback, thinking: asked.thinking ?? given?.thinking }
 }
 
 // The permission mode's own ask, for its decider (auto mode's classifier): not a rule's, a setting's, a hook's or a plugin's.
@@ -118,6 +120,7 @@ export const register: Register = (on, options) => {
   const asked = options.timeoutMinutes
   const world: World = {
     adapters: new Map<string, Adapter>(HARNESSES.map((adapter) => [adapter.name, adapter])),
+    personas: new Map(),
     defaultModel: typeof options.defaultModel === 'string' ? options.defaultModel.trim() : '',
     // The codexAcp setting: codex-acp's newest, rather than the version via pins.
     latest: new Set(options.codexAcp === 'latest' ? ['codex'] : []),
@@ -173,6 +176,31 @@ export const register: Register = (on, options) => {
         model: adapter.name,
       })
     }
+    // Personas of the session's folder: one agent type each, run by the harness it names. A persona never
+    // takes a harness's own name, and one whose harness is not installed (or takes no instructions) is said.
+    world.personas.clear()
+    for (const found of await loadPersonas($, e.cwd)) {
+      const adapter = world.adapters.get(found.harness)
+      const skip = (why: string) => $.ui.log(`crew skipped persona ${found.name}: ${why}`)
+      if (found.harness === '' || found.harness === 'claude') continue
+      if (world.adapters.has(found.name)) skip(`its name is a harness's name`)
+      else if (world.personas.has(found.name)) skip('a persona of that name is already registered')
+      else if (adapter === undefined) skip(`harness ${JSON.stringify(found.harness)} is not one crew drives`)
+      else if (!adapter.persona) skip(`${adapter.name} does not take persona instructions yet`)
+      else if (!(await onPath($, adapter.bin))) skip(`${adapter.bin} is not on PATH`)
+      else {
+        const { persona, refused } = checked(found, adapter)
+        if (refused.length > 0) skip(`ignored ${refused.join(', ')}: ${adapter.name} does not take it`)
+        world.personas.set(persona.name, persona)
+        await $.agent.register({
+          name: persona.name,
+          description: `${persona.description} (runs in ${adapter.name})`,
+          prompt: notActivePrompt(persona.name),
+          tools: [world.tool, 'Agent'],
+          model: adapter.name,
+        })
+      }
+    }
     return started
   })
 
@@ -211,10 +239,11 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    const [plugin, name = ''] = (e.subagentType ?? '').split(':')
-    const adapter = plugin === $.plugin.name ? world.adapters.get(name) : undefined
+    const resolved = resolveType(world, $.plugin.name, e.subagentType ?? '')
+    const adapter = resolved?.adapter
+    const persona = resolved?.persona
     // A harness's subagent, which via shows from its parent's run: no harness of its own to choose.
-    const key = adapter && e.tool_use_id.startsWith(CHILD_CALL) ? world.spawns.get(e.tool_use_id) : undefined
+    const key = adapter && !persona && e.tool_use_id.startsWith(CHILD_CALL) ? world.spawns.get(e.tool_use_id) : undefined
     if (adapter && key !== undefined) {
       world.spawns.delete(e.tool_use_id)
       // In the foreground the parent's step would wait on a nested agent that waits on the parent's run.
@@ -240,7 +269,7 @@ export const register: Register = (on, options) => {
     // No request reaches Claude: the agent's model is the harness's, which Claude Code stamps on every
     // response via makes up. Claude Code takes gateway model ids. The task shows what was asked for.
     // A resume keeps what its agent started with; a workflow agent's description is the script's.
-    const choice = adapter && !e.resume ? choiceOf(world, adapter, e.prompt) : undefined
+    const choice = adapter && !e.resume ? choiceOf(world, adapter, e.prompt, persona) : undefined
     const shown = choice && !e.workflow ? [choice.model, choice.thinking].filter(Boolean).join(' · ') : ''
     const started = await next(
       adapter && choice
@@ -253,7 +282,7 @@ export const register: Register = (on, options) => {
       // allows Claude itself, which a harness maps to its own modes.
       // A resume, or a teammate brought back, is the same agent: its session, choice and answer stay, and only
       // the spawn's terms are new.
-      const terms = { harness: adapter.name, handback: handsBack(e), mode: e.permissionMode ?? 'default' }
+      const terms = { harness: adapter.name, ...(persona ? { persona } : {}), handback: handsBack(e), mode: e.permissionMode ?? 'default' }
       const kept = await recordOf(world, $, started.agentId)
       if (kept !== undefined && !kept.rebuilt)
         await updateRecord(world, $, started.agentId, { ...terms, description: e.description || kept.description })

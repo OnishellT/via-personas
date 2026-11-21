@@ -2,6 +2,7 @@ import type { Steps } from './acp/steps'
 import type { Adapter } from './adapter'
 import type { Children } from './children'
 import type { Installs } from './install'
+import type { Persona } from './personas'
 import type { Records } from './record'
 import type { Inbox } from './steer'
 
@@ -16,6 +17,7 @@ export type World = Steps &
   Installs & {
     adapters: ReadonlyMap<string, Adapter>
     defaultModel: string
+    personas: Map<string, Persona> // the session folder's personas whose harness is installed, by name
     latest: ReadonlySet<string> // harnesses whose ACP adapter installs the newest, not the pinned one
     timeoutMinutes: number
     turns: Map<string, Turn>

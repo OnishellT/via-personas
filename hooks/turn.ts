@@ -6,6 +6,7 @@ import { childRun } from './children'
 import { deliver, HANDBACK_TOOL, handbackAsked, respond, textChunks } from './handback'
 import { relayReady } from './install'
 import { cachedModels } from './models'
+import { resolveType } from './personas'
 import { helpOf, isModel, promptOf } from './prompt'
 import { type AgentRecord, recordOf, updateRecord } from './record'
 import { cutOff, type RunResult, run } from './run'
@@ -33,11 +34,18 @@ export async function adapterOf(w: World, $: Engine, agentId: string): Promise<A
   const agent = (await $.agent.list()).find((a) => a.id === agentId)
   // Not listed yet: decide on a later step rather than caching a guess.
   if (agent === undefined) return undefined
-  const [plugin, name = ''] = agent.type.split(':')
-  const adapter = plugin === $.plugin.name ? w.adapters.get(name) : undefined
+  const resolved = resolveType(w, $.plugin.name, agent.type)
+  const adapter = resolved?.adapter
   // The spawn's mode is unknown here, so the strictest: a read-only run, never one with more permission than
   // the person gave. In memory only, so a store that failed to answer cannot lose the real record.
-  if (adapter) w.records.set(agentId, { harness: adapter.name, handback: false, mode: 'plan', rebuilt: true })
+  if (adapter)
+    w.records.set(agentId, {
+      harness: adapter.name,
+      ...(resolved.persona ? { persona: resolved.persona } : {}),
+      handback: false,
+      mode: 'plan',
+      rebuilt: true,
+    })
   else w.others.add(agentId)
   return adapter
 }
@@ -218,8 +226,17 @@ async function* begin(
     return yield* say(bad)
   }
 
+  // A persona's model, tools and thinking are defaults; what the prompts asked for (held, then this prompt's) replaces them.
+  const persona = record.persona === undefined ? undefined : w.personas.get(record.persona)
+  if (record.persona !== undefined && persona === undefined) {
+    const lost = `The persona ${record.persona} is not defined in this session's .agents/agents folder, so ${adapter.name} was not run without its instructions.`
+    return yield* say(lost)
+  }
   const held = record.choice
   const merged: Choice = {
+    ...(persona?.model ? { model: persona.model } : {}),
+    ...(persona?.tools ? { tools: persona.tools } : {}),
+    ...(persona?.thinking ? { thinking: persona.thinking } : {}),
     ...held,
     ...(asked.model ? { model: asked.model } : {}),
     ...(asked.tools ? { tools: asked.tools } : {}),
@@ -296,6 +313,7 @@ async function* begin(
       chosen,
       mode,
       installed: ready.installed,
+      persona: persona?.body,
       guard,
       probe,
       signal: abort.signal,
@@ -314,13 +332,14 @@ type Drive = {
   chosen: Choice
   mode: Mode
   installed: string | undefined
+  persona: string | undefined
   guard: Readonly<Record<string, string>> | undefined
   probe: (latest: string | undefined) => Promise<string | undefined>
   signal: AbortSignal
 }
 
 async function* drive(w: World, $: EngineInterface, d: Drive): AsyncGenerator<TurnStepChunk | Mark, TurnStepResult> {
-  const { adapter, e, turn, agentId, record, chosen, mode, installed, guard, probe, signal } = d
+  const { adapter, e, turn, agentId, record, chosen, mode, installed, persona, guard, probe, signal } = d
   let prompt = d.prompt
   let block = 0
   let result: RunResult
@@ -338,6 +357,7 @@ async function* drive(w: World, $: EngineInterface, d: Drive): AsyncGenerator<Tu
       session,
       mode,
       installed,
+      persona,
       models,
       block,
       guard,
