@@ -2,8 +2,8 @@ import type { EngineInterface } from 'claude-code'
 import type { Adapter, GuideAdapter } from './adapter'
 import { onPath } from './installed'
 import { cachedModels } from './models'
-import { isModel } from './prompt'
 import { isForeign, loadPersonas, refusal } from './personas'
+import { isModel } from './prompt'
 
 // The crew guide: what the host needs to use every foreign subagent from its first turn, with no lookup.
 // It rides in the context of every session, so it is short: about 600 tokens with all six harnesses.
