@@ -3,33 +3,18 @@ import { drawCall, drawGroup } from './acp/render'
 import { answerCall, CHILD_CALL, endJob, STEP_CALL, waitStep } from './acp/steps'
 import type { Adapter } from './adapter'
 import { waitChild, woken } from './children'
+import { crewGuide } from './guide'
 import { respond, textChunks } from './handback'
 import { HARNESSES } from './harnesses'
+import { onPath } from './installed'
 import { cachedModels, refreshModels } from './models'
-import { checked, loadPersonas, resolveType } from './personas'
+import { checked, isForeign, loadPersonas, refusal, resolveType } from './personas'
 import { descriptionOf, isModel, promptOf } from './prompt'
 import { createRecord, recordOf, updateRecord } from './record'
 import { notActivePrompt } from './run'
 import { answerQuestion, sendMessage, steer, typed } from './steer'
 import { adapterOf, turnStep } from './turn'
 import type { World } from './world'
-
-// Only harnesses installed at session start get an agent type: each description rides on every request.
-async function onPath($: Pick<EngineInterface, 'env' | 'fs'>, bin: string): Promise<boolean> {
-  const path = (await $.env.get('PATH')) ?? ''
-  const dirs = path.split(path.includes(';') ? ';' : ':').filter(Boolean)
-  const found = await Promise.all(
-    dirs.flatMap((dir) =>
-      [bin, `${bin}.exe`].map((name) =>
-        $.fs.stat(`${dir}/${name}`).then(
-          (s) => s.kind === 'file',
-          () => false,
-        ),
-      ),
-    ),
-  )
-  return found.includes(true)
-}
 
 // A teammate's messages arrive wrapped (<teammate-message teammate_id=… summary=…>task</teammate-message>):
 // the harness gets the task alone, so its prompt lines (model:, tools:) are read from its top.
@@ -153,6 +138,14 @@ export const register: Register = (on, options) => {
       },
     }
   })
+  // The crew guide, in the host's context from its first turn. classic.SessionStart runs before session.start
+  // (observed), so the guide is built here from the same sources, not from what session.start registers.
+  // Best effort: a guide that cannot be built leaves the session without one, never without its agents.
+  on('classic.SessionStart', async ($, e, next) => {
+    const done = await next(e)
+    const guide = await crewGuide($, world, e.cwd).catch(() => '')
+    return guide === '' ? done : { ...done, additionalContext: [...(done.additionalContext ?? []), guide] }
+  })
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     // Best effort: a hook that throws is skipped whole, and the agents below must still register.
@@ -163,8 +156,10 @@ export const register: Register = (on, options) => {
     // Each harness tool call reaches Claude Code as a call to this tool, served by mcp/step.mts, which
     // runs nothing: its tool.call hook answers with what the harness reported. Bash would look the same,
     // but a hook that fails is skipped and the real command would run; a call nobody answers fails.
+    const installed = new Set<string>()
     for (const adapter of world.adapters.values()) {
       if (!(await onPath($, adapter.bin))) continue
+      installed.add(adapter.name)
       const models = await cachedModels($, adapter, world.defaultModel)
       void refreshModels($, adapter).catch(() => undefined)
       await $.agent.register({
@@ -180,17 +175,14 @@ export const register: Register = (on, options) => {
     // takes a harness's own name, and one whose harness is not installed (or takes no instructions) is said.
     world.personas.clear()
     for (const found of await loadPersonas($, e.cwd)) {
+      if (isForeign(found)) continue
+      const why = refusal(found, world, installed)
       const adapter = world.adapters.get(found.harness)
-      const skip = (why: string) => $.ui.log(`crew skipped persona ${found.name}: ${why}`)
-      if (found.harness === '' || found.harness === 'claude') continue
-      if (world.adapters.has(found.name)) skip(`its name is a harness's name`)
-      else if (world.personas.has(found.name)) skip('a persona of that name is already registered')
-      else if (adapter === undefined) skip(`harness ${JSON.stringify(found.harness)} is not one crew drives`)
-      else if (!adapter.persona) skip(`${adapter.name} does not take persona instructions yet`)
-      else if (!(await onPath($, adapter.bin))) skip(`${adapter.bin} is not on PATH`)
+      if (why !== undefined || adapter === undefined) $.ui.log(`crew skipped persona ${found.name}: ${why}`)
       else {
         const { persona, refused } = checked(found, adapter)
-        if (refused.length > 0) skip(`ignored ${refused.join(', ')}: ${adapter.name} does not take it`)
+        if (refused.length > 0)
+          $.ui.log(`crew skipped persona ${found.name}: ignored ${refused.join(', ')}: ${adapter.name} does not take it`)
         world.personas.set(persona.name, persona)
         await $.agent.register({
           name: persona.name,

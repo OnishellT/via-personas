@@ -62,6 +62,7 @@ export const agy = {
   catalogue: { argv: ['agy', 'models'], ids: (stdout: string) => stdout.split('\n').map((line) => line.split('\t')[0]?.trim() ?? '') },
   // Neither --mode plan nor --sandbox is read-only: plan mode ran a command that wrote a file
   // (tested live on 1.4.7), and --sandbox restricts only terminal commands.
+  listing: 'agy models',
   readOnly: 'none',
   thinking: THINKING,
   steer: false,

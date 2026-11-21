@@ -210,4 +210,5 @@ export const pi = {
   // pi names its model in the stream; a model line is a pattern, not a name to sign with.
   model: () => undefined,
   models: 'pi --list-models <search> finds patterns.',
+  listing: 'pi --list-models <search>',
 } as const satisfies Adapter

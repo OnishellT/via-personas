@@ -35,6 +35,7 @@ export const cursor = {
   defaultModel: false,
   models:
     "Cursor takes only the model values its ACP session offers, brackets included, such as `default[]` (the model chosen in your Cursor settings) or `composer-2.5[fast=true]`; one it refuses ends the run and names it. A plan's own limits apply: a run of a model your plan lacks answers 'Upgrade your plan to continue'.",
+  listing: 'send it `crew-help`; default[] is the model set in Cursor',
   persona: true,
   start: ({ choice, prompt, session, root, inbox, files, mode, persona }) =>
     acpStart(CURSOR, {

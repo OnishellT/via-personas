@@ -82,7 +82,8 @@ export function checked(persona: Persona, adapter: PromptAdapter): { persona: Pe
 type Loader = Pick<EngineInterface, 'fs' | 'ui'>
 
 // Every persona of the folder that is well formed, by name; a bad file is said and skipped, never a crash.
-export async function loadPersonas($: Loader, cwd: string): Promise<Persona[]> {
+// quiet: the skipped files are not said (the guide reads them again after session.start's own pass said them).
+export async function loadPersonas($: Loader, cwd: string, quiet = false): Promise<Persona[]> {
   const dir = `${cwd.replace(/\/+$/, '')}/${DIR}`
   const entries = await $.fs.list(dir).catch(() => undefined)
   if (entries === undefined) return []
@@ -91,10 +92,11 @@ export async function loadPersonas($: Loader, cwd: string): Promise<Persona[]> {
     if (!entry.name.endsWith('.md')) continue
     try {
       const parsed = parsePersona(entry.name, await $.fs.read(`${dir}/${entry.name}`))
-      if (typeof parsed === 'string') $.ui.log(`crew skipped persona ${entry.name}: ${parsed}`)
-      else found.push(parsed)
+      if (typeof parsed === 'string') {
+        if (!quiet) $.ui.log(`crew skipped persona ${entry.name}: ${parsed}`)
+      } else found.push(parsed)
     } catch (error) {
-      $.ui.log(`crew skipped persona ${entry.name}: ${String(error)}`)
+      if (!quiet) $.ui.log(`crew skipped persona ${entry.name}: ${String(error)}`)
     }
   }
   return found
@@ -112,4 +114,23 @@ export function resolveType(w: Known, plugin: string | undefined, type: string):
   const persona = w.personas.get(name)
   const harness = persona ? w.adapters.get(persona.harness) : undefined
   return persona && harness ? { adapter: harness, persona: persona.name } : undefined
+}
+
+// A persona written for another host (no harness, or claude's own) is no business of crew's, and not said.
+export const isForeign = (found: Persona) => found.harness === '' || found.harness === 'claude'
+
+// Why a persona of the folder gets no agent type, or undefined when it does. installed: the harnesses on PATH;
+// taken: the personas already registered, by name.
+export function refusal(
+  found: Persona,
+  w: { adapters: ReadonlyMap<string, Adapter>; personas: ReadonlyMap<string, unknown> },
+  installed: ReadonlySet<string>,
+): string | undefined {
+  const adapter = w.adapters.get(found.harness)
+  if (w.adapters.has(found.name)) return `its name is a harness's name`
+  if (w.personas.has(found.name)) return 'a persona of that name is already registered'
+  if (adapter === undefined) return `harness ${JSON.stringify(found.harness)} is not one crew drives`
+  if (!adapter.persona) return `${adapter.name} does not take persona instructions yet`
+  if (!installed.has(adapter.name)) return `${adapter.bin} is not on PATH`
+  return undefined
 }

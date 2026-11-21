@@ -56,6 +56,7 @@ export const codex = {
       }
     },
   },
+  listing: 'codex debug models',
   readOnly: 'enforced',
   tools: ['read', 'write'], // write: the same as no tools line, which an agent may not think to leave out
   thinking: 'offered',

@@ -71,6 +71,19 @@ export const zcode = {
   steer: false,
   defaultModel: false,
   modelFixed: true,
+  // The selection its settings hold: the model every run uses, since zcode takes no model flag.
+  configured: {
+    file: '.zcode/v2/provider_config.json',
+    pick: (text: string) => {
+      try {
+        const id = (JSON.parse(text) as { config?: { defaultModelSelection?: { modelId?: unknown } } }).config?.defaultModelSelection
+          ?.modelId
+        return typeof id === 'string' && id !== '' ? id : undefined
+      } catch {
+        return undefined
+      }
+    },
+  },
   persona: true,
   // The prompt is one `--prompt=` argument: `-p` with a prompt that starts with a dash is ambiguous to zcode,
   // and it reads no stdin. Only the global default model runs (no model flag); it runs with its own

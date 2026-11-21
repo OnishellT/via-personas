@@ -148,7 +148,7 @@ export function descriptionOf(adapter: HelpAdapter, models: readonly string[]): 
   if (adapter.thinking.length > 0) top.push('`thinking: high`')
   const steer = adapter.steer ? ' SendMessage steers it mid-run; one starting `interrupt:` stops its current step first.' : ''
   const lines = top.length > 0 ? ` Top lines: ${top.join(' ')}.` : ''
-  return `${adapter.about}${lines} \`crew-help\` for more.${steer}`
+  return `${adapter.about}${lines} Send it the prompt \`crew-help\` (a prompt, not a shell command) for more.${steer}`
 }
 
 // The offered models closest to one a harness refused, by shared name parts (deepseek, v4, free).
