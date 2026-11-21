@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { agy } from '../hooks/adapters/agy'
 import { codex } from '../hooks/adapters/codex'
+import { cursor } from '../hooks/adapters/cursor'
 import { opencode } from '../hooks/adapters/opencode'
 import { pi } from '../hooks/adapters/pi'
 import { descriptionOf, helpOf, nearestModels, promptOf } from '../hooks/prompt'
@@ -255,6 +256,11 @@ test('only a harness that steers tells Claude about interrupt:', () => {
   expect(descriptionOf(pi, [])).toContain('`interrupt:`')
   expect(descriptionOf(codex, [])).toContain('`interrupt:`')
   expect(descriptionOf(agy, [])).not.toContain('interrupt')
+})
+
+test('a harness with no model list and no tuning lines says no top lines', () => {
+  expect(descriptionOf(cursor, [])).not.toContain('Top lines')
+  expect(descriptionOf(cursor, [])).toContain('`crew-help`')
 })
 
 test('a model line starting with - is refused, so it can never be read as a flag', () => {

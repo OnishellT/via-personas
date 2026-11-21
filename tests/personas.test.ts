@@ -1,6 +1,7 @@
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 import { agy } from '../hooks/adapters/agy'
 import { codex } from '../hooks/adapters/codex'
+import { cursor } from '../hooks/adapters/cursor'
 import { opencode } from '../hooks/adapters/opencode'
 import { pi } from '../hooks/adapters/pi'
 import { parsePersona } from '../hooks/personas'
@@ -93,6 +94,22 @@ test('a persona of the session folder becomes an agent type; a bad file or a har
   expect(logged.some((l) => l.includes('claude-only'))).toBe(false)
 })
 
+test('crew:cursor and a cursor persona are registered only when cursor-agent is on PATH', async ($, on) => {
+  const files = { 'sage.md': '---\nname: sage\ndescription: Sage\nharness: cursor\n---\nAdvise.' }
+  const { registered, logged } = session(on, files, ['pi', 'cursor-agent'])
+  await $.session.start({ cwd: '/work/example', surface: null, isInteractive: false })
+  expect(registered.map((r) => r.name)).toEqual(['pi', 'cursor', 'sage'])
+  expect(registered.at(-1)?.description).toBe('Sage (runs in cursor)')
+  expect(logged.some((l) => l.includes('sage'))).toBe(false)
+})
+
+test('without cursor-agent on PATH there is no crew:cursor, and a cursor persona is skipped with a log line', async ($, on) => {
+  const { registered, logged } = session(on, { 'sage.md': '---\nname: sage\ndescription: Sage\nharness: cursor\n---\nAdvise.' })
+  await $.session.start({ cwd: '/work/example', surface: null, isInteractive: false })
+  expect(registered.map((r) => r.name)).toEqual(['pi'])
+  expect(logged.some((l) => l.includes('sage') && l.includes('cursor'))).toBe(true)
+})
+
 test('a persona runs in pi with its instructions on every run, its model and tools as defaults a prompt line overrides', async ($, on) => {
   const spawns: Spawn[] = []
   const { registered } = session(on, { 'scout.md': SCOUT })
@@ -164,8 +181,8 @@ const ME = { name: 'scout', body: 'Be brief.\nEnd with MARKER.' }
 const BLOCK = '<persona name="scout">\nBe brief.\nEnd with MARKER.\n</persona>\n\n'
 const START = { choice: {}, prompt: 'go', agentId: 'a1', root: '/r', mode: 'default' as const }
 
-test('opencode and agy get the persona as a block while their session has not taken it, and not once it has', () => {
-  for (const adapter of [opencode, agy]) {
+test('opencode, agy and cursor get the persona as a block while their session has not taken it, and not once it has', () => {
+  for (const adapter of [opencode, agy, cursor]) {
     expect(adapter.persona).toBe(true)
     expect(adapter.start({ ...START, persona: ME }).input).toBe(`${BLOCK}go`)
     expect(adapter.start({ ...START, persona: { ...ME, fresh: true } }).input).toBe(`${BLOCK}go`)
