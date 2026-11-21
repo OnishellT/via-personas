@@ -76,7 +76,7 @@ export function unwrapped(text: string): string {
 }
 
 // The tool of the server plugin.json declares as `step`, named as Claude Code names a plugin's server.
-const STEP = 'mcp__plugin_via_step__step'
+const STEP = 'mcp__plugin_crew_step__step'
 
 const CLAUDE = /claude|opus|sonnet|haiku|fable/i
 const KEPT = 4

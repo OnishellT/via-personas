@@ -65,7 +65,7 @@ const RESUMED = `${[
 ].join('\n')}\n`
 const RESUMED_ID = 'f99e03a5-cc1d-480b-89df-72c64d19928d'
 const RUN_ID = 'bcaf913f-b720-4789-919c-194b72343a9d'
-const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'via:agy' })
+const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'crew:agy' })
 const MODEL = JSON.stringify({ status: 'SUCCESS', command: { name: 'model', data: { id: 'gemini-3.8-flash-high', effort: 'high' } } })
 
 function arrange(

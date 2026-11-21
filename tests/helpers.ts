@@ -36,7 +36,7 @@ export const STUB = {
 } as const
 export type Spawn = { argv: string[]; input: string | undefined; env?: Record<string, string> }
 export type Write = { path: string; text: string }
-const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'via:pi' })
+const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'crew:pi' })
 const EVENTS = [
   { type: 'message_start', message: { role: 'assistant', provider: 'openrouter', model: 'kimi' } },
   { type: 'tool_execution_start', toolName: 'bash', args: { command: 'ls' } },
@@ -64,7 +64,7 @@ export async function runTurn($: TestDollar, step: typeof STEP = STEP) {
     const done = await run($, { ...step, index })
     chunks.push(...done.chunks)
     const tool = done.chunks.find((c) => c.kind === 'tool')
-    if (done.result.stopReason !== 'tool_use' || tool?.kind !== 'tool' || tool.name !== 'mcp__plugin_via_step__step')
+    if (done.result.stopReason !== 'tool_use' || tool?.kind !== 'tool' || tool.name !== 'mcp__plugin_crew_step__step')
       return { chunks, result: done.result, calls }
     const input = done.chunks.find((c) => c.kind === 'input')
     const args = input?.kind === 'input' ? (JSON.parse(input.json) as Record<string, unknown>) : {}
@@ -74,7 +74,7 @@ export async function runTurn($: TestDollar, step: typeof STEP = STEP) {
 
 export function expectPiSpawn(spawn: Spawn | undefined, root: string, extra: string[] = []) {
   expect(spawn?.argv).toEqual(['pi', '-p', '--mode', 'json', '--session-id', 'pi-a1', '-e', `${root}/pi-extension/inbox.ts`, ...extra])
-  expect(spawn?.env).toEqual({ PI_INBOX: '/home/u/.claude/via/inbox/pi-a1.jsonl' })
+  expect(spawn?.env).toEqual({ PI_INBOX: '/home/u/.claude/crew/inbox/pi-a1.jsonl' })
 }
 
 export const ENV = { TMPDIR: '/tmp', HOME: '/home/u' }
@@ -178,7 +178,7 @@ export function testWorld(given: Partial<World> = {}): World {
     nested: new Map(),
     parents: new Map(),
     spawns: new Map(),
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     jobs: new Map(),
     calls: new Map(),
     ...given,

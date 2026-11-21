@@ -32,7 +32,7 @@ test('a later step joins one retained producer read through bounded waits, advan
       return { turnId: 't1', index: 1, answer: 'finished after silence', toolUses: [], stopReason: 'end_turn' as const, usage: null }
     })(),
   }
-  const world: steps.Steps = { tool: 'mcp__plugin_via_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
+  const world: steps.Steps = { tool: 'mcp__plugin_crew_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
   const timers: { wake: () => void; cancelled: boolean }[] = []
   let waits = 0
   // Production registers this as an engine noun: each bounded wait is one timer, and returns when it fires.
@@ -80,7 +80,7 @@ test('an aborted run ends its step instead of waiting again for a read that neve
       return { turnId: 't1', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: null }
     })(),
   }
-  const world: steps.Steps = { tool: 'mcp__plugin_via_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
+  const world: steps.Steps = { tool: 'mcp__plugin_crew_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
   let waits = 0
   const wait = () => {
     waits += 1
@@ -124,7 +124,7 @@ test('a replaced run is never read by the step that held the old one', async () 
       return { turnId: 't2', index: 0, answer: 'new turn', toolUses: [], stopReason: 'end_turn' as const, usage: null }
     })(),
   }
-  const world: steps.Steps = { tool: 'mcp__plugin_via_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
+  const world: steps.Steps = { tool: 'mcp__plugin_crew_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
   const old = finish(
     steps.pump(world, job, { turnId: 't1', index: 0, agentId: 'fixture' }, new AbortController().signal, () =>
       steps.waitStep(world, 'fixture', 't1', (wake) => {
@@ -161,7 +161,7 @@ test('a tool call joins the read an earlier step left pending, in order', async 
     })(),
   }
   const world: steps.Steps = {
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     spawns: new Map(),
     jobs: new Map([['fixture', job]]),
     calls: new Map([['toolu_one', { agentId: 'fixture', id: 'one' }]]),
@@ -188,7 +188,7 @@ test('a read that threw ends its step with an explicit answer, and is not kept',
       throw new Error('producer failed')
     })(),
   }
-  const world: steps.Steps = { tool: 'mcp__plugin_via_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
+  const world: steps.Steps = { tool: 'mcp__plugin_crew_step__step', spawns: new Map(), jobs: new Map([['fixture', job]]), calls: new Map() }
   const event = { turnId: 't1', index: 0, agentId: 'fixture' }
   const never = () => new Promise<void>(() => {})
   // A failed producer ends the step with an explicit answer, not a hook error.

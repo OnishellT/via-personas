@@ -69,7 +69,7 @@ test('the reason shows unless it is the usual threshold', () => {
 test('a compaction row reads as Claude Code reads its own: one line, the summary behind ctrl+o', () => {
   const props = {
     tool_use_id: 't',
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     input: { kind: 'compact', title: 'conversation' },
     isRunning: false,
     isErrored: false,

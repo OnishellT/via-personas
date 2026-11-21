@@ -45,7 +45,7 @@ async function nestedChild(
   mock.env(on, { HOME: '/home/u' })
   // The record the parent's spawn left.
   const store = agentStore(on, { a1: { harness: 'codex' } })
-  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'via:codex' })] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'crew:codex' })] }))
   // A refused transcript read throws inside via's step: any throw there does the same.
   on('session.messages', (_, e) => (refused === 'transcript' && e.agentId === 'n1' ? { deny: 'transcript unavailable' } : { value: [] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
@@ -83,7 +83,7 @@ async function nestedChild(
   expect(tool?.kind === 'tool' && tool.name).toBe('Agent')
   await $.agent.spawn({
     tool_use_id: tool?.kind === 'tool' ? tool.id : '',
-    subagentType: 'via:codex',
+    subagentType: 'crew:codex',
     prompt: 'List acp',
     description: 'List acp',
     provider: { plugin: 'engine', tier: 'core' },

@@ -12,7 +12,7 @@ test('a SendMessage to a live pi agent is steered into its inbox', async ($, on)
   await clock.settle()
   const delivered = await $.tool.call({ tool: 'SendMessage', to: 'a1', message: 'also do B', tool_use_id: 't' })
   expect(delivered.result).toEqual({ success: true, message: 'Delivered to the running pi agent; pi reads it at its next step.' })
-  expect(writes.at(-1)?.path).toBe('/home/u/.claude/via/inbox/pi-a1.jsonl')
+  expect(writes.at(-1)?.path).toBe('/home/u/.claude/crew/inbox/pi-a1.jsonl')
   expect(writes.at(-1)?.text.split('\n')).toContain(JSON.stringify('also do B'))
   await clock.advance(30 * 60 * 1000)
   await pending
@@ -45,7 +45,7 @@ test("a message typed into a running pi agent's view is steered into its inbox, 
   const pending = run($)
   await clock.settle()
   await $.session.append(QUEUED('a1', 'also do B\non two lines'))
-  expect(writes.at(-1)?.path).toBe('/home/u/.claude/via/inbox/pi-a1.jsonl')
+  expect(writes.at(-1)?.path).toBe('/home/u/.claude/crew/inbox/pi-a1.jsonl')
   expect(writes.at(-1)?.text.split('\n')).toContain(JSON.stringify('also do B\non two lines'))
   await $.session.append(QUEUED('a1', 'interrupt: stop and do C'))
   expect(writes.at(-1)?.text.split('\n')).toContain(JSON.stringify({ interrupt: 'stop and do C' }))
@@ -127,7 +127,7 @@ test('the inbox is cleared when the pi run ends', async ($, on) => {
   expect(writes.at(-1)?.text).toContain('also do B')
   await clock.advance(30 * 60 * 1000)
   await pending
-  expect(writes.at(-1)).toEqual({ path: '/home/u/.claude/via/inbox/pi-a1.jsonl', text: '' })
+  expect(writes.at(-1)).toEqual({ path: '/home/u/.claude/crew/inbox/pi-a1.jsonl', text: '' })
 })
 
 test('a steer pi consumed is not reported as undelivered', async ($, on) => {
@@ -220,7 +220,7 @@ test('USERPROFILE stands in for HOME', async ($, on) => {
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
   const pending = run($)
   await clock.settle()
-  expect(spawns[0]?.env).toEqual({ PI_INBOX: 'C:/Users/u/.claude/via/inbox/pi-a1.jsonl' })
+  expect(spawns[0]?.env).toEqual({ PI_INBOX: 'C:/Users/u/.claude/crew/inbox/pi-a1.jsonl' })
   await clock.advance(30 * 60 * 1000)
   await pending
 })
@@ -230,7 +230,7 @@ test('an interrupt: message aborts the running pi step, then runs on the same se
   const spawns: Spawn[] = []
   const writes: Write[] = []
   mock.env(on, ENV)
-  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'via:pi' })] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'crew:pi' })] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_, e, next) => next(e))
   on('session.messages', () => ({ value: [] }))

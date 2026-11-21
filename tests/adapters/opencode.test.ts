@@ -45,7 +45,7 @@ const CAPTURED = [
   { relay: 'done', stopReason: 'end_turn' },
 ]
 const lines = (events: unknown[]) => `${events.map((e) => JSON.stringify(e)).join('\n')}\n`
-const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'via:opencode' })
+const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'crew:opencode' })
 
 function arrange(
   on: TestOn,
@@ -284,13 +284,13 @@ test("opencode's command ends the step with a call to via's tool, which the next
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
   const first = await run($)
   expect(first.result.stopReason).toBe('tool_use')
-  expect(first.result.toolUses).toEqual([{ name: 'mcp__plugin_via_step__step', input: { kind: 'execute', title: 'echo hi > asked.txt' } }])
+  expect(first.result.toolUses).toEqual([{ name: 'mcp__plugin_crew_step__step', input: { kind: 'execute', title: 'echo hi > asked.txt' } }])
   const tool = first.chunks.find((c) => c.kind === 'tool')
   if (tool?.kind !== 'tool') throw new Error('no tool chunk')
   // Each step numbers its blocks from 0.
   expect(Math.min(...first.chunks.flatMap((c) => ('index' in c ? [c.index] : [])))).toBe(0)
   const answered = await $.tool.call({
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     tool_use_id: tool.id,
     kind: 'execute',
     title: 'echo hi > asked.txt',
@@ -305,7 +305,7 @@ test("a call to via's tool that no harness made is refused and runs nothing", as
   const spawns: Spawn[] = []
   arrange(on, spawns)
   const answered = await $.tool.call({
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     tool_use_id: 'toolu_made_up',
     kind: 'execute',
     title: 'rm -rf /',
@@ -496,7 +496,7 @@ test("a harness's subagent is an agent nested under the via agent, with the chil
   expect(rest.result.answer).toContain('It found steps.ts.')
   expect(rest.result.answer).not.toContain('\nsteps.ts')
   // In the foreground the parent's step would wait on a nested agent that waits on the parent's run.
-  expect(await $.agent.spawn({ ...SPAWN, tool_use_id: id, subagentType: 'via:opencode', background: false })).toEqual({
+  expect(await $.agent.spawn({ ...SPAWN, tool_use_id: id, subagentType: 'crew:opencode', background: false })).toEqual({
     deny: "via shows a harness's subagent only as a background agent, and background tasks are off",
   })
 })
@@ -509,7 +509,7 @@ test('a background nested agent shows its harness subagent from the parent run',
   const call = first.chunks.find((c) => c.kind === 'tool')
   const id = call?.kind === 'tool' ? call.id : ''
   await runTurn($, { ...STEP, index: 1 })
-  expect(await $.agent.spawn({ ...SPAWN, tool_use_id: id, subagentType: 'via:opencode', background: true })).toEqual({
+  expect(await $.agent.spawn({ ...SPAWN, tool_use_id: id, subagentType: 'crew:opencode', background: true })).toEqual({
     model: 'x',
     agentId: 'n1',
   })

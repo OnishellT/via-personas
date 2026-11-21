@@ -231,9 +231,9 @@ test("a child's thinking and plan reach its view, but its context stays apart", 
 
 test("a child's progress and step rows stream before its final message", async () => {
   const w = world()
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'Read code' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', title: 'Read code' })
   w.nested.set('n1', 'a1/c#1')
-  const send = (norm: Norm) => route(w, 'a1', 'via:codex', of('c', norm))
+  const send = (norm: Norm) => route(w, 'a1', 'crew:codex', of('c', norm))
   send({ k: 'thinking', t: 'Checking the call sites.' })
   const plan: Norm = { k: 'plan', entries: [{ content: 'Read the code', status: 'in_progress' }] }
   send(plan)
@@ -250,7 +250,7 @@ test("a child's progress and step rows stream before its final message", async (
     abort: new AbortController(),
     count: 0,
   }
-  const steps = { ...w, tool: 'mcp__plugin_via_step__step', jobs: new Map([['n1', job]]), calls: new Map(), spawns: new Map() }
+  const steps = { ...w, tool: 'mcp__plugin_crew_step__step', jobs: new Map([['n1', job]]), calls: new Map(), spawns: new Map() }
   const step = { turnId: 't1', index: 0, agentId: 'n1' }
   const signal = new AbortController().signal
   const wait = () => new Promise<void>(() => {})
@@ -268,7 +268,7 @@ test("a child's progress and step rows stream before its final message", async (
   expect(w.channels.get('a1/c#1')?.ended).toBe(false)
   send({ k: 'message' })
   send({ k: 'text', t: 'The implementation is correct.' })
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
   const final = await drain(pump(steps, job, { ...step, index: 2 }, signal, wait))
   expect(final.result.answer).toBe('The implementation is correct.\n\n— answered by codex subagent')
   expect(final.result.stopReason).toBe('end_turn')
@@ -276,12 +276,12 @@ test("a child's progress and step rows stream before its final message", async (
 
 test("a child's consecutive messages have separate text blocks and only the last is its answer", async () => {
   const w = world()
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'Read code' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', title: 'Read code' })
   for (const t of ['Reading the code.', 'The code is correct.']) {
-    route(w, 'a1', 'via:codex', of('c', { k: 'message' }))
-    route(w, 'a1', 'via:codex', of('c', { k: 'text', t }))
+    route(w, 'a1', 'crew:codex', of('c', { k: 'message' }))
+    route(w, 'a1', 'crew:codex', of('c', { k: 'text', t }))
   }
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
   w.nested.set('n1', 'a1/c#1')
   const { out, result } = await drain(
     childRun(w, 'n1', 'codex', { turnId: 't1', index: 0 }, new AbortController().signal, false, () => new Promise(() => {})),
@@ -305,14 +305,14 @@ async function drain(gen: AsyncGenerator<TurnStepChunk | Mark, TurnStepResult>) 
 test("a subagent's first work spawns its nested agent once, and its nested agent shows its rows then its signed answer", async () => {
   const w = world()
   // Its announcement and model are not work: it waits for a task to show as its prompt.
-  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })).toEqual([])
-  expect(route(w, 'a1', 'via:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))).toEqual([])
-  expect(route(w, 'a1', 'via:codex', of('c', { k: 'call', id: 'x', kind: 'read', title: 'List files' }))).toEqual([
-    { kind: 'spawn', child: 'a1/c#1', type: 'via:codex', title: 'List acp' },
+  expect(route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })).toEqual([])
+  expect(route(w, 'a1', 'crew:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))).toEqual([])
+  expect(route(w, 'a1', 'crew:codex', of('c', { k: 'call', id: 'x', kind: 'read', title: 'List files' }))).toEqual([
+    { kind: 'spawn', child: 'a1/c#1', type: 'crew:codex', title: 'List acp' },
   ])
-  route(w, 'a1', 'via:codex', of('c', { k: 'called', id: 'x', output: 'steps.ts', failed: false }))
-  route(w, 'a1', 'via:codex', of('c', { k: 'text', t: 'steps.ts' }))
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  route(w, 'a1', 'crew:codex', of('c', { k: 'called', id: 'x', output: 'steps.ts', failed: false }))
+  route(w, 'a1', 'crew:codex', of('c', { k: 'text', t: 'steps.ts' }))
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
   w.nested.set('n1', 'a1/c#1')
   const { out, result } = await drain(
     childRun(w, 'n1', 'codex', { turnId: 't1', index: 0 }, new AbortController().signal, false, () => new Promise(() => {})),
@@ -324,8 +324,8 @@ test("a subagent's first work spawns its nested agent once, and its nested agent
   expect(result.answer).toBe('steps.ts\n\n— answered by codex subagent, gpt-6-luna')
   // Seen live 2026-10-28: codex-acp clears the child's cancel capability after it goes idle. A patch
   // is not a new child; only the parent's end lets the child go.
-  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root' })).toEqual([])
-  expect(route(w, 'a1', 'via:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))).toEqual([])
+  expect(route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root' })).toEqual([])
+  expect(route(w, 'a1', 'crew:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))).toEqual([])
   closeChildren(w, 'a1')
   expect(w.channels.size).toBe(0)
 })
@@ -333,10 +333,10 @@ test("a subagent's first work spawns its nested agent once, and its nested agent
 // A child that wrote part of a reply, then ended as the parse of its idle state says.
 async function endedWith(end: { failure?: string; cancelled?: boolean }) {
   const w = world()
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })
-  route(w, 'a1', 'via:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))
-  route(w, 'a1', 'via:codex', of('c', { k: 'text', t: 'steps.ts' }))
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle', ...end })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })
+  route(w, 'a1', 'crew:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))
+  route(w, 'a1', 'crew:codex', of('c', { k: 'text', t: 'steps.ts' }))
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle', ...end })
   w.nested.set('n1', 'a1/c#1')
   const gen = childRun(w, 'n1', 'codex', { turnId: 't1', index: 0 }, new AbortController().signal, false, () => new Promise(() => {}))
   return (await drain(gen)).result.answer
@@ -354,12 +354,12 @@ test('a cancelled nested child keeps its text and says it was cancelled, not tha
 
 test('work after a subagent went idle is a new nested agent with the same title', () => {
   const w = world()
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
-  expect(route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'running' })).toEqual([])
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', title: 'List acp' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  expect(route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'running' })).toEqual([])
   // Found by review: each assignment keeps its own queue, so two nested agents never split one.
-  expect(route(w, 'a1', 'via:codex', of('c', { k: 'text', t: 'second' }))).toEqual([
-    { kind: 'spawn', child: 'a1/c#2', type: 'via:codex', title: 'List acp' },
+  expect(route(w, 'a1', 'crew:codex', of('c', { k: 'text', t: 'second' }))).toEqual([
+    { kind: 'spawn', child: 'a1/c#2', type: 'crew:codex', title: 'List acp' },
   ])
   expect(w.channels.get('a1/c#1')?.queue).toEqual([{ k: 'end' }])
   expect(w.channels.get('a1/c#2')?.queue).toEqual([{ k: 'text', t: 'second' }])
@@ -367,8 +367,8 @@ test('work after a subagent went idle is a new nested agent with the same title'
 
 test("a subagent with no announcement (codex-acp 2.3.0's own form) still gets a nested agent, ended by its parent's run", async () => {
   const w = world()
-  expect(route(w, 'a1', 'via:codex', of('c', { k: 'text', t: 'done' }))).toEqual([
-    { kind: 'spawn', child: 'a1/c#1', type: 'via:codex', title: 'subagent' },
+  expect(route(w, 'a1', 'crew:codex', of('c', { k: 'text', t: 'done' }))).toEqual([
+    { kind: 'spawn', child: 'a1/c#1', type: 'crew:codex', title: 'subagent' },
   ])
   // The parent's run ends before the nested agent's first step: its queue waits for it.
   closeChildren(w, 'a1')
@@ -382,52 +382,52 @@ test("a subagent with no announcement (codex-acp 2.3.0's own form) still gets a 
 
 test("a subagent's own subagent is spawned by its nested agent, not the run's", async () => {
   const w = world()
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'outer' })
-  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'Delegate the search.' }))
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'g', parent: 'c', title: 'inner' })
-  expect(route(w, 'a1', 'via:codex', of('g', { k: 'told', t: 'Search acp.' }))).toEqual([])
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', title: 'outer' })
+  route(w, 'a1', 'crew:codex', of('c', { k: 'told', t: 'Delegate the search.' }))
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'g', parent: 'c', title: 'inner' })
+  expect(route(w, 'a1', 'crew:codex', of('g', { k: 'told', t: 'Search acp.' }))).toEqual([])
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
   w.nested.set('n1', 'a1/c#1')
   const { out } = await drain(
     childRun(w, 'n1', 'codex', { turnId: 't1', index: 0 }, new AbortController().signal, false, () => new Promise(() => {})),
   )
   expect(out.filter((c) => c.kind === 'spawn')).toEqual([
-    { kind: 'spawn', child: 'a1/g#1', type: 'via:codex', title: 'inner', prompt: 'Search acp.' },
+    { kind: 'spawn', child: 'a1/g#1', type: 'crew:codex', title: 'inner', prompt: 'Search acp.' },
   ])
 })
 
 test("a subagent's new assignment keeps the model its session reported", () => {
   const w = world()
-  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'One.' }))
-  route(w, 'a1', 'via:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
-  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'Two.' }))
+  route(w, 'a1', 'crew:codex', of('c', { k: 'told', t: 'One.' }))
+  route(w, 'a1', 'crew:codex', of('c', { k: 'model', name: 'gpt-6-luna' }))
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  route(w, 'a1', 'crew:codex', of('c', { k: 'told', t: 'Two.' }))
   expect(w.channels.get('a1/c#2')?.model).toBe('gpt-6-luna')
 })
 
 test("a subagent's own subagent given new work after its parent's nested agent ended is shown from the run", () => {
   const w = world()
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', title: 'outer' })
-  route(w, 'a1', 'via:codex', of('c', { k: 'told', t: 'Delegate the search.' }))
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'g', parent: 'c', title: 'inner' })
-  route(w, 'a1', 'via:codex', of('g', { k: 'told', t: 'Search acp.' }))
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'g', parent: 'c', state: 'idle' })
-  route(w, 'a1', 'via:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', title: 'outer' })
+  route(w, 'a1', 'crew:codex', of('c', { k: 'told', t: 'Delegate the search.' }))
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'g', parent: 'c', title: 'inner' })
+  route(w, 'a1', 'crew:codex', of('g', { k: 'told', t: 'Search acp.' }))
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'g', parent: 'c', state: 'idle' })
+  route(w, 'a1', 'crew:codex', { k: 'child', id: 'c', parent: 'root', state: 'idle' })
   // Its nested agent has read its end: nothing reads its queue any more.
   const outer = w.channels.get('a1/c#1')
   if (outer) outer.read = true
-  expect(route(w, 'a1', 'via:codex', of('g', { k: 'told', t: 'Search again.' }))).toEqual([
-    { kind: 'spawn', child: 'a1/g#2', type: 'via:codex', title: 'inner', prompt: 'Search again.' },
+  expect(route(w, 'a1', 'crew:codex', of('g', { k: 'told', t: 'Search again.' }))).toEqual([
+    { kind: 'spawn', child: 'a1/g#2', type: 'crew:codex', title: 'inner', prompt: 'Search again.' },
   ])
 })
 
 test('a spawn mark ends the step with an Agent call in the background, remembered for its spawn', async () => {
   const gen = (async function* (): AsyncGenerator<TurnStepChunk | Mark, TurnStepResult> {
-    yield { kind: 'spawn', child: 'a1/c#1', type: 'via:codex', title: 'List acp' }
+    yield { kind: 'spawn', child: 'a1/c#1', type: 'crew:codex', title: 'List acp' }
     return { turnId: 't1', index: 0, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })()
   const job: Job = { turnId: 't1', gen, held: [], outputs: new Map(), abort: new AbortController(), count: 0 }
-  const w = { tool: 'mcp__plugin_via_step__step', jobs: new Map([['a1', job]]), calls: new Map(), spawns: new Map<string, string>() }
+  const w = { tool: 'mcp__plugin_crew_step__step', jobs: new Map([['a1', job]]), calls: new Map(), spawns: new Map<string, string>() }
   const step = pump(w, job, { turnId: 't1', index: 0, agentId: 'a1' }, new AbortController().signal, () => new Promise(() => {}))
   const chunks: TurnStepChunk[] = []
   let r = await step.next()
@@ -435,7 +435,7 @@ test('a spawn mark ends the step with an Agent call in the background, remembere
     chunks.push(r.value)
     r = await step.next()
   }
-  const input = { description: 'List acp', prompt: 'List acp', subagent_type: 'via:codex', run_in_background: true }
+  const input = { description: 'List acp', prompt: 'List acp', subagent_type: 'crew:codex', run_in_background: true }
   expect(r.value.toolUses).toEqual([{ name: 'Agent', input }])
   const tool = chunks.find((c) => c.kind === 'tool')
   expect(tool?.kind === 'tool' && tool.name).toBe('Agent')

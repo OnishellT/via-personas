@@ -56,7 +56,7 @@ test('a prompt starting with @ reaches pi as the message, not as a file argument
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: '@README.md summarise this' })
   await run($)
   expect(spawns[0]?.argv.some((arg) => arg.startsWith('@'))).toBe(false)
-  expect(spawns[0]?.env).toEqual({ PI_INBOX: '/home/u/.claude/via/inbox/pi-a1.jsonl' })
+  expect(spawns[0]?.env).toEqual({ PI_INBOX: '/home/u/.claude/crew/inbox/pi-a1.jsonl' })
   expect(spawns[0]?.input).toBe('@README.md summarise this')
 })
 
@@ -78,7 +78,7 @@ test('the session registers an agent type only for a harness on PATH', async ($,
   expect(seen).toEqual(['pi'])
   // Its agent can call the tool of via's step server, which reports the harness's tool calls.
   // Agent: the harness's own subagents show as agents nested under this one.
-  expect(tools).toEqual(['mcp__plugin_via_step__step', 'Agent'])
+  expect(tools).toEqual(['mcp__plugin_crew_step__step', 'Agent'])
 })
 
 test('a read-only tool list ignores the project trust-gated .pi resources; a list with a writing tool keeps them', async ($, on) => {

@@ -10,7 +10,7 @@ type On = Parameters<TestBody>[1]
 
 const SPAWN: AgentSpawnInput = {
   tool_use_id: 'toolu_spawn',
-  subagentType: 'via:pi',
+  subagentType: 'crew:pi',
   prompt: 'go',
   description: 'd',
   provider: { plugin: 'engine', tier: 'core' },
@@ -42,7 +42,7 @@ test("a via agent's model falls back to the defaultModel setting", { options: { 
 
 test("with no model asked a via agent's model names the harness, not a Claude model", async ($, on) => {
   const models = spawned(on)
-  await $.agent.spawn({ ...SPAWN, subagentType: 'via:codex', prompt: 'go' })
+  await $.agent.spawn({ ...SPAWN, subagentType: 'crew:codex', prompt: 'go' })
   expect(models).toEqual(['codex'])
 })
 

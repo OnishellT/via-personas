@@ -37,7 +37,7 @@ export type Adapter = {
     readonly why: string
   }
   // Runs behind relay/relay.mjs, which needs Node 22.18 or later. install: an ACP adapter via installs
-  // once from a lockfile it ships, into ~/.claude/via/acp/<dir>; start then gets its entry point, or
+  // once from a lockfile it ships, into ~/.claude/crew/acp/<dir>; start then gets its entry point, or
   // 'latest' when the person chose to fetch the newest one instead.
   readonly relay?: {
     readonly install?: { readonly dir: string; readonly package: string; readonly files: readonly string[]; readonly entry: string }

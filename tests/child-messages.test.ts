@@ -70,7 +70,7 @@ function arrange(on: On, lines: readonly unknown[]) {
   mock.clock(on)
   mock.env(on, { HOME: '/home/u' })
   agentStore(on, { a1: { harness: 'codex' } })
-  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'via:codex' })] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'crew:codex' })] }))
   on('session.messages', () => ({ value: [] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } }))
@@ -98,8 +98,8 @@ test("a subagent's task is its nested agent's prompt, and a follow-up after it w
   arrange(on, RECORDED)
   const { calls, answer } = await agentCalls($)
   expect(calls).toEqual([
-    { description: 'subagent', prompt: TASK, subagent_type: 'via:codex', run_in_background: true },
-    { description: 'subagent', prompt: FOLLOWUP, subagent_type: 'via:codex', run_in_background: true },
+    { description: 'subagent', prompt: TASK, subagent_type: 'crew:codex', run_in_background: true },
+    { description: 'subagent', prompt: FOLLOWUP, subagent_type: 'crew:codex', run_in_background: true },
   ])
   expect(answer).toContain('DONE')
 })
@@ -119,14 +119,14 @@ const announce = (description: string) => ({
 test("a subagent's role is not its task: shown beside its title", async ($, on) => {
   arrange(on, ROLE_RUN(announce('explorer')))
   expect((await agentCalls($)).calls).toEqual([
-    { description: 'Kestrel (explorer)', prompt: TASK, subagent_type: 'via:codex', run_in_background: true },
+    { description: 'Kestrel (explorer)', prompt: TASK, subagent_type: 'crew:codex', run_in_background: true },
   ])
 })
 
 test("codex's role `default` says nothing, so only the title shows", async ($, on) => {
   arrange(on, ROLE_RUN(announce('default')))
   expect((await agentCalls($)).calls).toEqual([
-    { description: 'Kestrel', prompt: TASK, subagent_type: 'via:codex', run_in_background: true },
+    { description: 'Kestrel', prompt: TASK, subagent_type: 'crew:codex', run_in_background: true },
   ])
 })
 
@@ -142,7 +142,7 @@ test("a task with no announcement or outgoing view still reaches the nested agen
     { relay: 'done', stopReason: 'end_turn' },
   ])
   expect((await agentCalls($)).calls).toEqual([
-    { description: 'subagent', prompt: TASK, subagent_type: 'via:codex', run_in_background: true },
+    { description: 'subagent', prompt: TASK, subagent_type: 'crew:codex', run_in_background: true },
   ])
 })
 
@@ -165,7 +165,7 @@ test("a follow-up sent while the subagent works is a row in its nested agent's v
   const agent = first.chunks.find((c) => c.kind === 'tool')
   await $.agent.spawn({
     tool_use_id: agent?.kind === 'tool' ? agent.id : '',
-    subagentType: 'via:codex',
+    subagentType: 'crew:codex',
     prompt: TASK,
     description: 'subagent',
     provider: { plugin: 'engine', tier: 'core' },

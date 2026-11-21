@@ -65,7 +65,7 @@ const answers: Record<string, (message: Message) => object | undefined> = {
     return {
       protocolVersion: params?.protocolVersion ?? '2025-06-18',
       capabilities: { tools: {} },
-      serverInfo: { name: 'via', version: '0' },
+      serverInfo: { name: 'crew', version: '0' },
     }
   },
   ping: () => ({}),

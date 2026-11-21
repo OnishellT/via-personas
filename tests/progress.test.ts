@@ -9,7 +9,7 @@ const START = { type: 'message_start', message: { role: 'assistant', provider: '
 const TOOL = { type: 'tool_execution_start', toolName: 'bash', args: { command: 'npm test' } }
 const call = (over: Partial<Parameters<typeof drawCall>[0]>): Parameters<typeof drawCall>[0] => ({
   tool_use_id: 't',
-  tool: 'mcp__plugin_via_step__step',
+  tool: 'mcp__plugin_crew_step__step',
   input: { kind: 'execute', title: 'npm test' },
   isRunning: false,
   isErrored: false,
@@ -80,7 +80,7 @@ test('a call that names a file links its title to it', () => {
 
 const group = (kinds: unknown[], isActive = false): Parameters<typeof drawGroup>[0] => ({
   calls: kinds.map((kind) => ({
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     input: { kind, title: 'x' },
     isRunning: false,
     isErrored: false,

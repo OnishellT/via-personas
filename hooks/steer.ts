@@ -26,8 +26,8 @@ export async function openInbox(
   if (!home) return undefined
   const inbox: Inbox = {
     name,
-    path: `${home}/.claude/via/inbox/${name}-${agentId}.jsonl`,
-    files: `${home}/.claude/via/files/${name}-${agentId}`,
+    path: `${home}/.claude/crew/inbox/${name}-${agentId}.jsonl`,
+    files: `${home}/.claude/crew/files/${name}-${agentId}`,
     lines: [],
   }
   const opened = await $.fs.write(inbox.path, '').then(

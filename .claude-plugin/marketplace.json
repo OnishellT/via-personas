@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "via",
+      "name": "crew",
       "source": "./",
       "description": "Hand work to another coding-agent harness as a native Claude Code subagent."
     }

@@ -152,7 +152,7 @@ test('a pi agent whose first turn carries no text runs the spawn prompt', async 
   on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }))
   await $.agent.spawn({
     tool_use_id: 'toolu_pi_spawn',
-    subagentType: 'via:pi',
+    subagentType: 'crew:pi',
     prompt: 'from the spawn',
     description: 'd',
     provider: { plugin: 'engine', tier: 'core' },
@@ -182,7 +182,7 @@ test('a spawn teaches the harness before agent.list catches up', async ($, on) =
   on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }))
   await $.agent.spawn({
     tool_use_id: 'toolu_pi_spawn',
-    subagentType: 'via:pi',
+    subagentType: 'crew:pi',
     prompt: 'from the spawn',
     description: 'd',
     provider: { plugin: 'engine', tier: 'core' },
@@ -216,7 +216,7 @@ async function spawnPi(
 ) {
   await $.agent.spawn({
     tool_use_id: 'toolu_pi_spawn',
-    subagentType: 'via:pi',
+    subagentType: 'crew:pi',
     prompt: 'go',
     description: 'd',
     provider: { plugin: 'engine', tier: 'core' },
@@ -322,7 +322,7 @@ test('a step with no turn hands back a saved report that was never delivered', a
   expect(again.result.toolUses).toEqual([])
 })
 
-// Captured 2026-10-28: /background right after a via:opencode spawn. The new process resumed the agent
+// Captured 2026-10-28: /background right after a crew:opencode spawn. The new process resumed the agent
 // with no turn.start, and via answered "check the plugin is loaded" while loaded (third-cut session 858bcc0d).
 test('a step with no turn and no saved report says the run was cut off, not that via is missing', async ($, on) => {
   arrange(on, [], split(lines))
@@ -337,7 +337,7 @@ test('a spawn keeps its harness in the store, and parallel spawns keep each othe
   const spawn = (prompt: string) =>
     $.agent.spawn({
       tool_use_id: `toolu_${prompt}`,
-      subagentType: 'via:pi',
+      subagentType: 'crew:pi',
       prompt,
       description: 'd',
       provider: { plugin: 'engine', tier: 'core' },
@@ -664,7 +664,7 @@ test('an Esc that finds the run parked between steps ends the run, so its harnes
   await gen.next()
   const job = { turnId: 't1', gen, held: [], outputs: new Map(), abort: new AbortController(), count: 0 }
   const w = {
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     jobs: new Map([['a1', job]]),
     calls: new Map([['toolu_1', { agentId: 'a1', id: 'c1' }]]),
     spawns: new Map(),
@@ -699,7 +699,7 @@ test('a child-call id via never issued is an ordinary via spawn, whose step runs
   on('agent.spawn', () => ({ model: 'gpt-6-luna', agentId: 'n1' }))
   await $.agent.spawn({
     tool_use_id: `${CHILD_CALL}t1_1`,
-    subagentType: 'via:pi',
+    subagentType: 'crew:pi',
     prompt: 'List acp',
     description: 'List acp',
     provider: { plugin: 'engine', tier: 'core' },
@@ -770,7 +770,7 @@ test('an agent via has no record of runs read-only, and its made-up record is ne
   mock.env(on, ENV)
   node(on)
   const store = agentStore(on)
-  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'via:pi' })] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'crew:pi' })] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('session.messages', () => ({ value: [] }))
   on('fs.write', () => ({ value: undefined }))
@@ -790,7 +790,7 @@ test('a refusal for an agent via has no record of says why it runs read-only, no
   mock.env(on, ENV)
   node(on)
   agentStore(on)
-  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'via:agy' })] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'x', type: 'crew:agy' })] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('session.messages', () => ({ value: [] }))
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
@@ -803,7 +803,7 @@ test('a refusal for an agent via has no record of says why it runs read-only, no
 test("a via agent's plan is a row each time it changes, its entries the row's output", async ($, on) => {
   mock.env(on, { HOME: '/home/u' })
   agentStore(on, { a1: { harness: 'codex' } })
-  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'via:codex' })] }))
+  on('agent.list', () => ({ value: [agentInfo({ id: 'a1', description: 'parent', type: 'crew:codex' })] }))
   on('session.messages', () => ({ value: [] }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } }))

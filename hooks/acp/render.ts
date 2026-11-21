@@ -43,7 +43,7 @@ const COUNTED: Record<string, [string, string, string, string]> = {
 }
 
 // The line Claude Code folds a run of harness tool calls into, counted by what each did ("Read 3 files,
-// ran 2 commands") in place of its "Called plugin:via:step 5 times". Styled as Claude Code's own: dim,
+// ran 2 commands") in place of its "Called plugin:crew:step 5 times". Styled as Claude Code's own: dim,
 // counts bold, undimmed under the pointer, since a click unfolds it.
 export function drawGroup(props: RenderPropsOf['ToolGroup']): RenderElement {
   const counts = new Map<string, number>()

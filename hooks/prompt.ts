@@ -30,7 +30,7 @@ const LISTED = 30
 
 function helpName(line: string, adapter: PromptAdapter): boolean {
   const name = HELP_LINE.exec(line)?.[1]?.toLowerCase()
-  return name === 'via' || name === adapter.name.toLowerCase()
+  return name === 'via' || name === 'crew' || name === adapter.name.toLowerCase()
 }
 
 function isHeader(line: string, adapter: PromptAdapter): boolean {
@@ -141,7 +141,7 @@ export function descriptionOf(adapter: HelpAdapter, models: readonly string[]): 
   if (adapter.readOnly !== 'none') top.push('`tools: read`')
   if (adapter.thinking.length > 0) top.push('`thinking: high`')
   const steer = adapter.steer ? ' SendMessage steers it mid-run; one starting `interrupt:` stops its current step first.' : ''
-  return `${adapter.about} Top lines: ${top.join(' ')}. \`via-help\` for more.${steer}`
+  return `${adapter.about} Top lines: ${top.join(' ')}. \`crew-help\` for more.${steer}`
 }
 
 // The offered models closest to one a harness refused, by shared name parts (deepseek, v4, free).

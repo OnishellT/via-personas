@@ -201,10 +201,10 @@ test('pi- prompt lines remain aliases beside the neutral ones', async ($, on) =>
   expect(spawns[0]?.input).toBe('go')
 })
 
-test('a via-help line answers with HELP without spawning pi', async ($, on) => {
+test('a crew-help line answers with HELP without spawning pi', async ($, on) => {
   const spawns: Spawn[] = []
   arrange(on, spawns, split(lines))
-  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'via-help' })
+  await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'crew-help' })
   const { result } = await run($)
   expect(spawns).toEqual([])
   expect(result.answer).toBe(HELP)

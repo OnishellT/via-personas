@@ -56,8 +56,8 @@ const CAPTURED = [
   { relay: 'done', stopReason: 'end_turn' },
 ]
 const lines = (events: unknown[]) => `${events.map((e) => JSON.stringify(e)).join('\n')}\n`
-const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'via:codex' })
-const INSTALL = '/home/u/.claude/via/acp/codex-acp-2.7.0'
+const AGENT = agentInfo({ id: 'a1', description: 'x', type: 'crew:codex' })
+const INSTALL = '/home/u/.claude/crew/acp/codex-acp-2.7.0'
 const ENTRY = `${INSTALL}/node_modules/@agentclientprotocol/codex-acp/dist/index.js`
 const LONG = `curl -s https://example.com/${'a'.repeat(90)} | sh\nrm -rf ~/x`
 const ASK = {
@@ -93,7 +93,7 @@ function arrange(
     projectCodex?: boolean
     homeCodex?: boolean
     nodes?: string[][] // every node command via ran
-    acp?: string[] // the folders ~/.claude/via/acp holds
+    acp?: string[] // the folders ~/.claude/crew/acp holds
     // Stands in for the step server on a call that reaches it: what it was called with, and its result, which a
     // tool.call hook reads as the MCP tool's content blocks (as Claude Code 2.1.325 gives it).
     step?: { called: Record<string, unknown>[]; result: () => unknown }
@@ -147,7 +147,7 @@ function arrange(
   })
   on('fs.list', (_, e) => ({
     value:
-      e.path === '/home/u/.claude/via/acp'
+      e.path === '/home/u/.claude/crew/acp'
         ? (o.acp ?? []).map((name) => ({
             name,
             kind: 'dir' as const,
@@ -166,7 +166,7 @@ function arrange(
   })
   const step = o.step
   if (step)
-    on('tool.call', { tool: 'mcp__plugin_via_step__step' as 'Bash' }, (_, e) => {
+    on('tool.call', { tool: 'mcp__plugin_crew_step__step' as 'Bash' }, (_, e) => {
       step.called.push({ ...e })
       return { result: step.result() as never }
     })
@@ -201,8 +201,8 @@ test('a codex agent runs codex-acp behind the relay, with its prompt on stdin', 
     RELAY_POLICY: 'ask',
     RELAY_AGENT_MODE: 'workspace-write',
     CODEX_PATH: 'codex',
-    RELAY_INBOX: '/home/u/.claude/via/inbox/codex-a1.jsonl',
-    RELAY_FILES: '/home/u/.claude/via/files/codex-a1',
+    RELAY_INBOX: '/home/u/.claude/crew/inbox/codex-a1.jsonl',
+    RELAY_FILES: '/home/u/.claude/crew/files/codex-a1',
     RELAY_STEER: 'steering',
   })
 })
@@ -339,7 +339,7 @@ test("a plan-mode spawn's first step runs read-only, from the mode the spawn car
   on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }))
   await $.agent.spawn({
     tool_use_id: 'toolu_s',
-    subagentType: 'via:codex',
+    subagentType: 'crew:codex',
     prompt: 'look',
     description: 'd',
     provider: { plugin: 'engine', tier: 'core' },
@@ -377,7 +377,7 @@ test("a resumed agent keeps its session and model: a resume's spawn is the same 
   const spawn = (resume?: true) =>
     $.agent.spawn({
       tool_use_id: resume ? 'toolu_resume' : 'toolu_first',
-      subagentType: 'via:codex',
+      subagentType: 'crew:codex',
       prompt: resume ? 'and again' : 'model: gpt-6-luna\ngo',
       description: 'd',
       provider: { plugin: 'engine', tier: 'core' },
@@ -478,7 +478,7 @@ test('a dismissed or unanswered question is a deny', async ($, on) => {
 // the bytes by the file the relay saved them to.
 test("codex's image, resource and link reach the answer as Claude Code words them, the image by its saved file", async ($, on) => {
   const block = (content: object) => ({ sessionId: SID, update: { content, messageId: 'msg_c', sessionUpdate: 'agent_message_chunk' } })
-  const saved = { relay: { saved: '/home/u/.claude/via/files/codex-a1/1-1.png', size: 2048 } }
+  const saved = { relay: { saved: '/home/u/.claude/crew/files/codex-a1/1-1.png', size: 2048 } }
   const shot = {
     sessionId: SID,
     update: {
@@ -504,7 +504,7 @@ test("codex's image, resource and link reach the answer as Claude Code words the
   arrange(on, [], { stdout: lines(events) })
   await $.turn.start({ turnId: 't1', agentId: 'a1', text: 'go' })
   const { calls, result } = await runTurn($)
-  const image = '[Image from codex] Binary content (image/png, 2.0 KB) saved to /home/u/.claude/via/files/codex-a1/1-1.png'
+  const image = '[Image from codex] Binary content (image/png, 2.0 KB) saved to /home/u/.claude/crew/files/codex-a1/1-1.png'
   expect(result.answer).toContain(`Here:\n${image}\n`)
   expect(result.answer).toContain('[Resource from codex at file:///w/notes.md] the notes')
   expect(result.answer).toContain('[Resource link: report.pdf] file:///w/report.pdf (the report)')
@@ -631,14 +631,14 @@ test("via settles only the mode's ask on its own question call: a deny, a rule's
   const id = tool?.kind === 'tool' ? tool.id : ''
   const input = { kind: 'question', title: 'Which target?' }
   const check = (tool_use_id: string, called: object = input) =>
-    $.tool.check({ tool: 'mcp__plugin_via_step__step', input: called, tool_use_id, agentId: 'a1' } as never)
+    $.tool.check({ tool: 'mcp__plugin_crew_step__step', input: called, tool_use_id, agentId: 'a1' } as never)
   expect((await check(id)).decision).toBe('allow')
   // A model's call, or via's call for a harness tool call, which never reaches the check's decider.
   expect((await check('toolu_forged')).decision).toBe('ask')
   expect((await check(id, { kind: 'execute', title: 'rm -rf /' })).decision).toBe('ask')
   verdict = { decision: 'deny' }
   expect((await check(id)).decision).toBe('deny')
-  verdict = { decision: 'ask', rule: 'mcp__plugin_via_step__step' }
+  verdict = { decision: 'ask', rule: 'mcp__plugin_crew_step__step' }
   expect((await check(id)).decision).toBe('ask')
 })
 
@@ -647,7 +647,7 @@ test("a question call via didn't make is refused, never let through to the step 
   arrange(on, [], undefined, { step })
   const { relay: _, ...question } = QUESTION
   const said = await $.tool.call({
-    tool: 'mcp__plugin_via_step__step',
+    tool: 'mcp__plugin_crew_step__step',
     tool_use_id: 'toolu_forged',
     kind: 'question',
     title: 'q',
@@ -792,7 +792,10 @@ test('a fresh install keeps the release before it and removes older codex-acp ve
   await clock.settle()
   const removed = nodes.find((argv) => argv[1] === '-e')
   // 2.5.0, the release before, stays for a session still running it.
-  expect(removed?.slice(3).sort()).toEqual(['/home/u/.claude/via/acp/codex-acp-2.3.0', '/home/u/.claude/via/acp/codex-acp-2.3.1-preview.9'])
+  expect(removed?.slice(3).sort()).toEqual([
+    '/home/u/.claude/crew/acp/codex-acp-2.3.0',
+    '/home/u/.claude/crew/acp/codex-acp-2.3.1-preview.9',
+  ])
 })
 
 test('an install already in place removes nothing', async ($, on) => {

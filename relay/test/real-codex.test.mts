@@ -43,7 +43,7 @@ const lock = JSON.parse(readFileSync(new URL('../codex-acp/package-lock.json', i
 }
 const pinned = lock.packages['node_modules/@agentclientprotocol/codex-acp']?.version
 const codexAcp =
-  process.env.CODEX_ACP ?? join(homedir(), `.claude/via/acp/codex-acp-${pinned}/node_modules/@agentclientprotocol/codex-acp/dist/index.js`)
+  process.env.CODEX_ACP ?? join(homedir(), `.claude/crew/acp/codex-acp-${pinned}/node_modules/@agentclientprotocol/codex-acp/dist/index.js`)
 const skip = !installed('codex') ? 'codex is not on PATH' : !existsSync(codexAcp) ? `codex-acp is not at ${codexAcp}` : false
 
 let fake: FakeModel

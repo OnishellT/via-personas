@@ -52,7 +52,7 @@ export async function relayReady(w: Installs, $: Engine, adapter: Adapter, lates
   if (!install) return {}
   const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
   if (!home) return `${adapter.name} needs a home folder to install ${install.dir} into.`
-  const root = `${home}/.claude/via/acp`
+  const root = `${home}/.claude/crew/acp`
   const dir = `${root}/${latest ? 'latest' : install.dir}`
   const entry = `${dir}/${install.entry}`
   let installing = w.installs.get(dir)

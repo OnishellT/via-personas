@@ -5,7 +5,7 @@ max_turns: 6
 timeout_seconds: 300
 ---
 
-Use the via:opencode agent. Start the prompt you give it with exactly these two lines:
+Use the crew:opencode agent. Start the prompt you give it with exactly these two lines:
 
 model: opencode/beam-free
 thinking: ultra
