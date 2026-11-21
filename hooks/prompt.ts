@@ -1,9 +1,10 @@
 import type { HelpAdapter, PromptAdapter } from './adapter'
 
 // A model never starts with '-': passed as its own argument, it would read as a flag. A pi tool list may
-// (-bash,read removes bash), since it always follows --tools.
+// (-bash,read removes bash), since it always follows --tools. Cursor's own ids carry brackets, equals signs
+// and commas (composer-2.5[fast=true]); the model reaches the harness as an argument or a config value, never a shell.
 const VALUE = {
-  model: /^[A-Za-z0-9_.:/*~@+][A-Za-z0-9_.:/*~@+-]*$/,
+  model: /^[A-Za-z0-9_.:/*~@+][A-Za-z0-9_.:/*~@+[\]=,-]*$/,
   tools: /^[A-Za-z0-9_*+,:.-]+$/,
   thinking: /^\S+$/,
   config: /^[A-Za-z0-9_.-]+=\S*$/,
