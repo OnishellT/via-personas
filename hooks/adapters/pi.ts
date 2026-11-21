@@ -126,7 +126,7 @@ export const pi = {
       ...(choice.model ? ['--model', choice.model] : []),
       ...(choice.tools ? ['--tools', choice.tools, ...(readsOnly(choice.tools) ? ['-na'] : [])] : []),
       ...(choice.thinking ? ['--thinking', choice.thinking] : []),
-      ...(persona ? ['--append-system-prompt', persona] : []),
+      ...(persona ? ['--append-system-prompt', persona.body] : []),
     ],
     env: { PI_INBOX: inbox ?? '' },
     input: prompt,

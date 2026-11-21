@@ -7,6 +7,7 @@ import type { Choice } from '../types'
 export type AgentRecord = {
   harness: string
   persona?: string // the persona this agent runs, by name: its instructions ride on every run of the harness
+  delivered?: string // the harness session that has taken this persona's block: a run on another one, or a failed first run, sends it again
   nested?: true // a harness's own subagent: only its parent's run can answer it
   handback: boolean // spawned locally in auto mode: its answer goes back as a SubagentHandback
   mode: string // Claude Code's permission mode at the spawn

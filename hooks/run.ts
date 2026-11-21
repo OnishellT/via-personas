@@ -2,7 +2,7 @@ import type { EngineInterface, Timer, TurnStepChunk, TurnUsage } from 'claude-co
 import type { Choice } from '../types'
 import type { Norm } from './acp/norm'
 import type { Mark } from './acp/steps'
-import type { Adapter, Ask, Mode } from './adapter'
+import type { Adapter, Ask, Delivery, Mode } from './adapter'
 import { closeChildren, route } from './children'
 import { nearestModels } from './prompt'
 import { finish, type Totals } from './report'
@@ -20,7 +20,8 @@ export const cutOff = (name: string) =>
 export const notActivePrompt = (name: string) =>
   `You are not ${name}: this plugin did not take this step. Use no tools and do not attempt the task. Reply with exactly this and nothing else:\n\n${notActive(name)}`
 // interrupted: an `interrupt:` message aborted the harness on purpose; next is what to run in its place.
-export type RunResult = { aborted: boolean; signed: string; usage: TurnUsage | null; block: number; next?: string }
+// answered: the harness session that took the run's prompt and answered it, or that an interrupt cut after it did.
+export type RunResult = { aborted: boolean; signed: string; usage: TurnUsage | null; block: number; next?: string; answered?: string }
 export type RunInput = {
   agentId: string
   choice: Choice
@@ -32,7 +33,7 @@ export type RunInput = {
   guard: Readonly<Record<string, string>> | undefined
   mode: Mode
   installed?: string
-  persona?: string // the persona's instructions, passed to the harness on every run
+  persona?: Delivery // the persona, passed to the adapter on every run
   models?: readonly string[] // the harness's offered models, for a refused model's nearest
   // Awaited only to sign, so a probe never delays the run or outlives an interrupted one.
   probe(session: string | undefined): Promise<string | undefined>
@@ -302,9 +303,14 @@ export async function* run(
       signed: '',
       usage: null,
       block: s.writer.index + 1,
+      ...(s.latest ? { answered: s.latest } : {}),
       next: [...undeliveredSteers(inbox, s.steered), inbox.interrupt].join('\n\n'),
     }
   }
+  // A harness that quietly starts a new session (agy, with its conversation gone) did not give it the persona's
+  // block: the record still has the old session, so the next message sends it.
+  if (persona?.fresh === false && session && s.latest && s.latest !== session)
+    s.notices.push(`The harness started a new session, which does not hold ${persona.name}'s instructions; they go with the next message.`)
   if (!s.answeredBy && !failure) s.answeredBy = (await probe(s.latest)) ?? ''
   const done = finish({
     adapter,
@@ -321,5 +327,6 @@ export async function* run(
     writer: s.writer,
   })
   yield* done.chunks
-  return { aborted: false, signed: done.signed, usage: done.usage, block: s.writer.index + 1 }
+  const answered = !failure && stopped === undefined && s.latest ? { answered: s.latest } : {}
+  return { aborted: false, signed: done.signed, usage: done.usage, block: s.writer.index + 1, ...answered }
 }

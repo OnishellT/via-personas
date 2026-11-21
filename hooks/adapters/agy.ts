@@ -1,6 +1,7 @@
 import { cap, relative, tail } from '../acp/events'
 import { isRecord } from '../acp/json'
 import type { Adapter, Norm } from '../adapter'
+import { withPersonaBlock } from '../deliver'
 
 // Written from agy 1.4.7's `--output-format stream-json`, captured 2026-10-24: agy publishes
 // no types for it (its Python SDK speaks a different protocol), so tests pin these shapes. A tool
@@ -68,7 +69,8 @@ export const agy = {
   // The prompt is plain stdin. Slash commands are off, or a prompt starting with `/` runs one.
   // --sandbox confines the commands agy runs (credentials such as ~/.kube are refused by the OS,
   // tested live); it does not stop agy's own file edits.
-  start: ({ choice, prompt, session }) => ({
+  persona: true,
+  start: ({ choice, prompt, session, persona }) => ({
     argv: [
       'agy',
       '--output-format',
@@ -78,7 +80,7 @@ export const agy = {
       ...flags(choice),
       ...(session ? ['--conversation', session] : []),
     ],
-    input: prompt,
+    input: withPersonaBlock(prompt, persona),
   }),
   // `/model` resolves the flags to the exact model, effort variant included, without a turn.
   probe: {

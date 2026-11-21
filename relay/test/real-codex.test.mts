@@ -136,6 +136,27 @@ test('a follow-up resumes the session, and Codex sends the model the earlier tur
   assert.match(said(1, 'user').join(), /What did you reply\?/)
 })
 
+// How via delivers a Codex persona: developer_instructions in CODEX_CONFIG, which codex-acp merges into the session's config.
+test("a persona's developer_instructions reach the model as a developer message on the first run and on a resumed one, once each", {
+  skip,
+}, async () => {
+  const b = box()
+  const persona = 'You are scout. End every answer with the line PERSONA-MARKER-7Q.'
+  const env = { CODEX_CONFIG: JSON.stringify({ developer_instructions: persona }) }
+  const count = (n: number) => said(n, 'developer').join().split('PERSONA-MARKER-7Q').length - 1
+  fake.enqueue(textResponse('PONG'))
+  const first = await codex(b, 'Reply with only the word PONG.', env)
+  assert.equal(first.status, 0, first.stderr)
+  assert.equal(count(0), 1)
+  fake.enqueue(textResponse('You said PONG.'))
+  const second = await codex(b, 'What did you reply?', { ...env, RELAY_SESSION: sessionOf(first.events) })
+  assert.equal(second.status, 0, second.stderr)
+  assert.equal(count(1), 1)
+  // The prompt itself carries no block: the instructions ride the developer channel only.
+  assert.doesNotMatch(said(0, 'user').join(), /PERSONA-MARKER-7Q|<persona/)
+  assert.deepEqual(fake.unexpected, [])
+})
+
 test('an interrupt cancels the turn and runs its text next, in the same session', { skip }, async () => {
   const b = box()
   fake.enqueue(hang(), textResponse('REDIRECTED'))

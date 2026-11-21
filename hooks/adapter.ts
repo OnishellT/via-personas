@@ -5,6 +5,10 @@ export type { Ask, Mode, Norm, Question, Usage } from './acp/norm'
 
 import type { Mode, Norm } from './acp/norm'
 
+// A persona as an adapter takes it: its name and its instructions.
+// fresh: the harness session it runs in has not taken the persona yet (absent: it has not), so a harness without a channel of its own is sent the block.
+export type Delivery = { readonly name: string; readonly body: string; readonly fresh?: boolean }
+
 export type Adapter = {
   readonly name: string
   readonly bin: string
@@ -24,7 +28,7 @@ export type Adapter = {
   readonly options?: true // takes config lines: options of its ACP session, which the relay checks
   readonly steer: boolean
   readonly defaultModel: boolean // takes the plugin's defaultModel setting
-  readonly persona?: true // takes a persona's instructions as its system prompt (start's `persona`)
+  readonly persona?: true // takes a persona (start's `persona`): by its system-prompt channel, or as a block on a session's first prompt
   readonly models?: string
   // A folder that voids read-only when found in the working folder or any folder above it, unless
   // it holds only the `harmless` entries: the harness loads code from it before any permission applies.
@@ -54,7 +58,7 @@ export type Adapter = {
     guard?: Readonly<Record<string, string>>
     mode: Mode
     installed?: string
-    persona?: string // the persona's instructions, on every run of its agent
+    persona?: Delivery // the persona to deliver; a channel of the harness's own carries it on every run, a block only on a session's first
   }): ProcessSpawnRequest
   // A parser per run: message boundaries can depend on earlier lines, and session is what the run asked to resume.
   events(session: string | undefined): (line: string) => Norm[]
