@@ -66,7 +66,7 @@ export const agy = {
   readOnly: 'none',
   thinking: THINKING,
   steer: false,
-  note: 'ids mostly end in a level (-low): use one listed or that pattern',
+  note: 'ids mostly end in a level, e.g. -low',
   defaultModel: false,
   // The prompt is plain stdin. Slash commands are off, or a prompt starting with `/` runs one.
   // --sandbox confines the commands agy runs (credentials such as ~/.kube are refused by the OS,

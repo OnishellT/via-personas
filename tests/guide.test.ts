@@ -78,11 +78,11 @@ test('each harness line says what it refuses, from its adapter', () => {
   const guide = full()
   const line = (name: string) => guide.split('\n').find((l) => l.startsWith(`- ${name}: `)) ?? ''
   expect(line('agy')).toContain('thinking: low|medium|high|xhigh|max')
-  expect(line('agy')).toContain('ids mostly end in a level')
+  expect(line('agy')).toContain('ids mostly end in a level, e.g. -low')
   expect(line('agy')).toContain('no tools line')
   expect(line('zcode')).toContain('no thinking line')
   expect(line('cursor')).toContain('no thinking line')
-  expect(line('cursor')).toContain('model default[] (set in the harness; more: `crew-help`)')
+  expect(line('cursor')).toContain('model default[] (Auto: Cursor picks the model; more: `crew-help`)')
   expect(line('agy')).not.toContain('default ')
   expect(line('codex')).toContain('takes config:')
   expect(line('codex')).not.toContain('no tools line')
@@ -188,7 +188,7 @@ test('session start adds the guide as context for the installed harnesses only, 
   const guide = await guideOfSession($)
   expect(guide.match(/^- \w+: /gm)).toEqual(['- pi: ', '- agy: ', '- zcode: '])
   expect(guide).toContain('- pi: default openrouter/kimi; models openrouter/glm (all: pi --list-models <search>)')
-  expect(guide).toContain('- agy: models gemini-4-neon-low (all: agy models)')
+  expect(guide).toContain('- agy: default: its own pick; models gemini-4-neon-low (all: agy models)')
   expect(guide).toContain('- zcode: runs on deepseek/deepseek-v4.1-flash (no model line)')
   expect(guide).not.toContain('codex')
   expect(guide).toContain('Personas: crew:scout (pi), crew:zscout (zcode)')
@@ -207,4 +207,15 @@ test('with no config of zcode, or none of its files at all, the guide is still a
 test('with no harness installed there is no guide', async ($, on) => {
   session(on, { bins: [] })
   expect(await guideOfSession($)).toBe('')
+})
+
+test('a harness with no default to read says its own pick, in plain words; cursor says what its default[] is', () => {
+  const guide = guideOf(
+    [agy, opencode, cursor].map((adapter) => ({ adapter, models: adapter.name === 'cursor' ? [] : ['m-1'] })),
+    [],
+  )
+  expect(guide).toContain('- agy: default: its own pick; models m-1')
+  expect(guide).toContain('- opencode: default: its own pick; models m-1')
+  expect(guide).toContain('- cursor: model default[] (Auto: Cursor picks the model; more: `crew-help`)')
+  expect(guide).not.toContain('- cursor: default')
 })

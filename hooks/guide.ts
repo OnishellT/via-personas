@@ -35,15 +35,15 @@ function harnessLine({ adapter, models: cached, configured }: GuideHarness): str
     const rest = adapter.listing ?? `send it \`crew-help\``
     lines.push(
       shown.length > 0
-        ? `${configured ? `default ${configured}; ` : ''}models ${shown.join(', ')}${more > 0 ? ` (+${more}: ${rest})` : ` (all: ${rest})`}`
+        ? `${configured ? `default ${configured}; ` : adapter.known ? '' : 'default: its own pick; '}models ${shown.join(', ')}${more > 0 ? ` (+${more}: ${rest})` : ` (all: ${rest})`}`
         : configured
           ? `default ${configured}; others: ${rest}`
           : adapter.known
-            ? `model ${adapter.known.join(', ')} (set in the harness; more: ${rest})`
+            ? `model ${adapter.known.join(', ')} (${adapter.note ?? 'listed'}; more: ${rest})`
             : `models not cached yet (list: ${rest})`,
     )
   }
-  if (adapter.note) lines.push(adapter.note)
+  if (adapter.note && !adapter.known) lines.push(adapter.note)
   if (adapter.thinking === 'offered') lines.push('thinking: any')
   else if (adapter.thinking.length > 0) lines.push(`thinking: ${adapter.thinking.join('|')}`)
   else lines.push('no thinking line')
