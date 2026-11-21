@@ -1,15 +1,25 @@
-# via
+# crew
+
+## Fork: crew personas
+
+`crew` is a fork of [via](https://github.com/SeanLF/claude-code-subagent-harnesses) by Sean Floyd (MIT, licence kept), renamed `via` to `crew` (plugin, marketplace, step tool `mcp__plugin_crew_step__step`, data dir `~/.claude/crew/`). Everything below this section is upstream's, with the name changed.
+
+What this fork adds: **personas**. A file `.agents/agents/<name>.md` in the session's folder, with `name`, `description`, `harness: pi` and optionally `harness-model`, `tools`, `thinking` in its frontmatter and the instructions as its body, becomes the agent type `crew:<name>`. The host spawns it like any subagent; pi runs it with the instructions as `--append-system-prompt` on every run, follow-ups included. `harness-model`, `tools` and `thinking` are defaults that a `model:`, `tools:` or `thinking:` prompt line overrides. Pi only for now; the per-harness types (`crew:pi`, `crew:codex`, ...) work as before. Try it in [example/](example/README.md).
+
+`/plugin install crew --marketplace OnishellT/via-personas`
+
+# via (upstream README)
 
 Claude hands a task to Codex, Antigravity, OpenCode or pi, and each runs it through its own CLI and login, as a Claude Code subagent.
 
-![A via:codex agent in Claude Code, its steps folded into lines such as "Ran 4 commands"](https://github.com/user-attachments/assets/e36113c3-b375-4f0d-99ae-5851e73105e9)
+![A crew:codex agent in Claude Code, its steps folded into lines such as "Ran 4 commands"](https://github.com/user-attachments/assets/e36113c3-b375-4f0d-99ae-5851e73105e9)
 
 ## Set up
 
-`/plugin install via --marketplace SeanLF/claude-code-subagent-harnesses` in Claude Code, or from a shell:
+`/plugin install crew --marketplace OnishellT/via-personas` in Claude Code, or from a shell:
 
 ```
-claude plugin install via --marketplace SeanLF/claude-code-subagent-harnesses
+claude plugin install crew --marketplace OnishellT/via-personas
 ```
 
 Needs Node 22.18 or later on PATH; Codex also needs npm. Install at least one harness: [Codex](https://github.com/openai/codex), [Antigravity CLI](https://github.com/google-antigravity/antigravity-cli), [OpenCode](https://opencode.ai) or [pi](https://pi.dev). Your agent can run the installs; signing in opens a browser, so that part is yours. Restart Claude Code afterwards, and again after adding another harness, so it sees what's on your PATH. Tested on macOS, CI also runs on Linux; Windows is untested.
@@ -49,7 +59,7 @@ Ask in plain language: "Have codex review src/api". Optional lines at the top of
 | `tools: read` | Read-only, whatever the permission mode |
 | `thinking: <level>` | Reasoning effort; a level the harness or model doesn't have is refused |
 | `config: <option>=<value>` | Codex and OpenCode: one of the harness's own options that tune its model, such as `fast-mode=on`; one per line, `fast-mode=` drops it. Never a mode or sandbox option, and none in a read-only run |
-| `via-help` | Lists the harness's options instead of running it |
+| `crew-help` | Lists the harness's options instead of running it |
 
 A message to a running Codex, OpenCode or pi agent reaches it at its next step; `interrupt:` first stops the current step. That holds for Claude's SendMessage; one you type into the agent's view waits in Claude Code until the current step ends, so it can't cut a long command short. agy only takes follow-ups. A completed answer ends with the model the harness reports; one only taken from your `model:` line says `(requested)`, and a harness that won't say gets `model not reported`.
 
@@ -86,4 +96,4 @@ Claude Code doesn't know a harness model's context size and would stop a `via` a
 
 ## Credit
 
-Inspired by [pi-agent-for-claude](https://github.com/FazalAAli/pi-agent-for-claude) by Fazal Ali. [claudexor](https://github.com/razzant/claudexor)'s Antigravity adapter was prior art for `via:agy`. The relay bundles the [ACP TypeScript SDK](https://github.com/agentclientprotocol/typescript-sdk) (Apache-2.0) and zod (MIT); see `relay/THIRD_PARTY_LICENSES`. MIT licence.
+Inspired by [pi-agent-for-claude](https://github.com/FazalAAli/pi-agent-for-claude) by Fazal Ali. [claudexor](https://github.com/razzant/claudexor)'s Antigravity adapter was prior art for `crew:agy`. The relay bundles the [ACP TypeScript SDK](https://github.com/agentclientprotocol/typescript-sdk) (Apache-2.0) and zod (MIT); see `relay/THIRD_PARTY_LICENSES`. MIT licence.
