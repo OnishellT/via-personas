@@ -24,38 +24,34 @@ test('the guide names only the harnesses it is given, and nothing at all when no
   expect(some).toContain('- pi: ')
   expect(some).toContain('- agy: ')
   for (const gone of ['codex', 'opencode', 'cursor', 'zcode']) expect(some).not.toContain(`- ${gone}: `)
-  expect(guideOf([], [{ name: 'scout', harness: 'pi', description: 'd' }])).toBe('')
+  expect(guideOf([], [{ name: 'scout', harness: 'pi' }])).toBe('')
 })
 
-test('a harness shows at most eight models, then the count left and its own way to list them', () => {
+test('a harness shows at most two models, then the count left and its own way to list them', () => {
   const guide = full()
   const line = guide.split('\n').find((l) => l.startsWith('- agy: ')) ?? ''
-  expect(line).toContain('agy-1, agy-2, agy-3, agy-4, agy-5, agy-6, agy-7, agy-8')
-  expect(line).not.toContain('agy-9')
-  expect(line).toContain('+4 more: agy models')
-  expect(guide).toContain('+4 more: codex debug models')
-  expect(guide).toContain('+4 more: pi --list-models <search>')
+  expect(line).toContain('agy-1, agy-2')
+  expect(line).not.toContain('agy-3')
+  expect(line).toContain('+10: agy models')
+  expect(guide).toContain('+10: codex debug models')
+  expect(guide).toContain('+10: pi --list-models <search>')
   const few = guideOf([{ adapter: codex, models: ['gpt-6.2-sol'] }], [])
   expect(few).toContain('models gpt-6.2-sol (all: codex debug models)')
 })
 
-test('each persona is listed with its harness and a one-line description', () => {
+test('the personas are listed on one line, each with its harness', () => {
   const guide = guideOf(
     [
       { adapter: pi, models: ['m'] },
       { adapter: zcode, models: [] },
     ],
     [
-      { name: 'scout', harness: 'pi', description: 'Scout that inspects files' },
-      { name: 'zscout', harness: 'zcode', description: `Long\nmulti-line ${'x'.repeat(200)}` },
+      { name: 'scout', harness: 'pi' },
+      { name: 'zscout', harness: 'zcode' },
     ],
   )
-  expect(guide).toContain('- crew:scout (pi): Scout that inspects files')
-  const long = guide.split('\n').find((l) => l.startsWith('- crew:zscout (zcode): ')) ?? ''
-  expect(long).toContain('Long multi-line x')
-  expect(long.endsWith('…')).toBe(true)
-  expect(long.length).toBeLessThan(100)
-  expect(guideOf([{ adapter: pi, models: ['m'] }], [])).not.toContain('- crew:')
+  expect(guide).toContain('Personas: crew:scout (pi), crew:zscout (zcode)')
+  expect(guideOf([{ adapter: pi, models: ['m'] }], [])).not.toContain('Personas')
 })
 
 test('zcode shows the model its config names; with no config it says its own default and still works', () => {
@@ -82,10 +78,11 @@ test('each harness line says what it refuses, from its adapter', () => {
   const guide = full()
   const line = (name: string) => guide.split('\n').find((l) => l.startsWith(`- ${name}: `)) ?? ''
   expect(line('agy')).toContain('thinking: low|medium|high|xhigh|max')
-  expect(line('agy')).toContain('no tools line (no read-only)')
+  expect(line('agy')).toContain('ids end in a level')
+  expect(line('agy')).toContain('no tools line')
   expect(line('zcode')).toContain('no thinking line')
   expect(line('cursor')).toContain('no thinking line')
-  expect(line('cursor')).toContain('model default[] is the one set in the harness; others: send it `crew-help`')
+  expect(line('cursor')).toContain('model default[] (set in the harness; more: `crew-help`)')
   expect(line('agy')).not.toContain('default ')
   expect(line('codex')).toContain('takes config:')
   expect(line('codex')).not.toContain('no tools line')
@@ -93,20 +90,33 @@ test('each harness line says what it refuses, from its adapter', () => {
   expect(line('agy')).toContain('no interrupt:')
 })
 
-test('pi names the model it runs with no model line, the first of its list; the others never invent one', () => {
+test('a harness whose settings name a default model says it once, and an other never invents one', () => {
   const guide = guideOf(
     [
-      { adapter: pi, models: ['openrouter/kimi', 'openrouter/glm'], fallback: 'openrouter/kimi' },
+      { adapter: pi, models: ['openrouter/kimi', 'openrouter/glm'], configured: 'openrouter/kimi' },
+      { adapter: codex, models: ['gpt-6.2-sol', 'gpt-6.1-terra'], configured: 'gpt-6.1-terra' },
       { adapter: agy, models: ['a-low'] },
     ],
     [],
   )
-  expect(guide).toContain('- pi: default openrouter/kimi; models openrouter/kimi, openrouter/glm')
+  expect(guide).toContain('- pi: default openrouter/kimi; models openrouter/glm (all: pi --list-models <search>)')
+  expect(guide).toContain('- codex: default gpt-6.1-terra; models gpt-6.2-sol (all: codex debug models)')
   expect(guide).not.toContain('default a-low')
+  expect(guideOf([{ adapter: codex, models: [], configured: 'gpt-6.1-terra' }], [])).toContain(
+    '- codex: default gpt-6.1-terra; others: codex debug models',
+  )
+})
+
+test("codex's default is the model line of its config before the first table", () => {
+  const pick = (text: string) => codex.configured.pick(text)
+  expect(pick('model = "gpt-6.1-terra"\n[projects]\nmodel = "x"')).toBe('gpt-6.1-terra')
+  expect(pick('# c\nmodel_reasoning_effort = "high"\nmodel="a-b"')).toBe('a-b')
+  expect(pick('[projects]\nmodel = "x"')).toBeUndefined()
+  expect(pick('')).toBeUndefined()
 })
 
 test('the guide says crew-help is a prompt, not a shell command, and every description words it so too', () => {
-  expect(full()).toContain('`crew-help` is a prompt (not a shell command)')
+  expect(full()).toContain('`crew-help`: a prompt (not a shell command)')
   for (const adapter of ALL) expect(descriptionOf(adapter, ['m'])).toContain('(a prompt, not a shell command)')
 })
 
@@ -118,23 +128,19 @@ test('long model ids are cut by space as well as by count, so the guide stays ne
       models: adapter.name === 'zcode' ? [] : long(adapter),
       ...(adapter.name === 'zcode' ? { configured: 'deepseek/deepseek-v4.1-flash' } : {}),
     })),
-    ALL.map((a) => ({
-      name: `${a.name}-scout`,
-      harness: a.name,
-      description: 'Scout that inspects files in the current folder, running in it',
-    })),
+    ALL.map((a) => ({ name: `${a.name}-scout`, harness: a.name })),
   )
   const pi = guide.split('\n').find((l) => l.startsWith('- pi: ')) ?? ''
-  expect(pi.match(/provider\/some-long-model-name-for-pi-\d+/g)?.length).toBeLessThan(8)
-  expect(pi).toContain('more: pi --list-models')
-  // About four characters a token: 600 tokens are 2400 characters, and these ids are the worst case.
-  expect(guide.length).toBeLessThan(2700)
+  expect(pi.match(/provider\/some-long-model-name-for-pi-\d+/g)?.length).toBeLessThan(3)
+  expect(pi).toContain('pi --list-models')
+  // 2.3 characters a token as measured on a real session, so 1550 characters are about 670 tokens; these ids are the worst case.
+  expect(guide.length).toBeLessThan(1550)
 })
 
 // A session in /work/example with the given binaries on PATH, personas on disk, models cached and zcode's settings.
 function session(
   on: Parameters<TestBody>[1],
-  c: { bins: string[]; files?: Record<string, string>; store?: Record<string, unknown>; zcode?: string },
+  c: { bins: string[]; files?: Record<string, string>; store?: Record<string, unknown>; zcode?: string; home?: Record<string, string> },
 ) {
   mock.env(on, { PATH: '/opt/bin', HOME: '/home/u', TMPDIR: '/tmp' })
   on('fs.stat', (_, e) => {
@@ -147,6 +153,8 @@ function session(
   })
   on('fs.read', (_, e) => {
     if (e.path === '/home/u/.zcode/v2/provider_config.json' && c.zcode !== undefined) return { value: c.zcode }
+    const homed = c.home?.[e.path]
+    if (homed !== undefined) return { value: homed }
     const file = c.files?.[e.path.split('/').at(-1) ?? '']
     if (file === undefined) throw new Error('ENOENT')
     return { value: file }
@@ -167,6 +175,7 @@ test('session start adds the guide as context for the installed harnesses only, 
   const logged = session(on, {
     bins: ['pi', 'agy', 'zcode'],
     store: { 'models.pi': ['openrouter/kimi', 'openrouter/glm'], 'models.agy': ['gemini-4-neon-low'], 'models.codex': ['gpt-6.2-sol'] },
+    home: { '/home/u/.pi/agent/settings.json': '{"defaultProvider":"openrouter","defaultModel":"kimi"}' },
     zcode: '{"config":{"defaultModelSelection":{"modelId":"deepseek/deepseek-v4.1-flash"}}}',
     files: {
       'scout.md': '---\nname: scout\ndescription: Scout that inspects files\nharness: pi\n---\nAnswer.',
@@ -178,12 +187,11 @@ test('session start adds the guide as context for the installed harnesses only, 
   })
   const guide = await guideOfSession($)
   expect(guide.match(/^- \w+: /gm)).toEqual(['- pi: ', '- agy: ', '- zcode: '])
-  expect(guide).toContain('- pi: default openrouter/kimi; models openrouter/kimi, openrouter/glm (all: pi --list-models <search>)')
+  expect(guide).toContain('- pi: default openrouter/kimi; models openrouter/glm (all: pi --list-models <search>)')
   expect(guide).toContain('- agy: models gemini-4-neon-low (all: agy models)')
   expect(guide).toContain('- zcode: runs on deepseek/deepseek-v4.1-flash (no model line)')
   expect(guide).not.toContain('codex')
-  expect(guide).toContain('- crew:scout (pi): Scout that inspects files')
-  expect(guide).toContain('- crew:zscout (zcode): ZCode scout')
+  expect(guide).toContain('Personas: crew:scout (pi), crew:zscout (zcode)')
   expect(guide).not.toContain('crew:cx')
   expect(guide).not.toContain('crew:mine')
   expect(guide).not.toContain('broken')

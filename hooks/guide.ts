@@ -6,29 +6,26 @@ import { isForeign, loadPersonas, refusal } from './personas'
 
 // The crew guide: what the host needs to use every foreign subagent from its first turn, with no lookup.
 // It rides in the context of every session, so it is short: about 600 tokens with all six harnesses.
-const SHOWN = 8 // models named per harness; the harness's own command lists the rest
-const SPACE = 130 // characters of model ids per harness: pi and opencode ids are long, and the guide stays short
-const BLURB = 60 // characters of a persona's description
+// Measured on a real session: 1500 characters were 640 tokens, 2.3 characters a token, because ids and punctuation
+// are dense. Do not grow the text without measuring it again (compare the input tokens of two sessions).
+const SHOWN = 2 // models named per harness; the harness's own command lists the rest
+const SPACE = 64 // characters of model ids per harness: pi and opencode ids are long, and the guide stays short
 
 export type GuideHarness = {
   adapter: GuideAdapter
   models: readonly string[] // the harness's cached list, best first
-  fallback?: string // the harness's configured default, when its cached list leads with it (pi)
-  configured?: string // the model a fixed harness runs, read from its own settings
+  configured?: string // the model the harness's own settings name: what a run with no model line uses
 }
-export type GuidePersona = { name: string; harness: string; description: string }
+export type GuidePersona = { name: string; harness: string }
 
-const clip = (text: string, max: number) => {
-  const one = text.replace(/\s+/g, ' ').trim()
-  return one.length > max ? `${one.slice(0, max - 1)}…` : one
-}
-
-function harnessLine({ adapter, models, configured, fallback }: GuideHarness): string {
+function harnessLine({ adapter, models: cached, configured }: GuideHarness): string {
   const name = adapter.name
   const lines: string[] = []
   if (adapter.modelFixed) lines.push(`runs on ${configured ?? 'its own default model'} (no model line)`)
   else {
     const shown: string[] = []
+    // The default is said once, so it leaves the list.
+    const models = cached.filter((id) => id !== configured)
     for (const id of models.slice(0, SHOWN)) {
       if (shown.length > 0 && [...shown, id].join(', ').length > SPACE) break
       shown.push(id)
@@ -37,16 +34,19 @@ function harnessLine({ adapter, models, configured, fallback }: GuideHarness): s
     const rest = adapter.listing ?? `send it \`crew-help\``
     lines.push(
       shown.length > 0
-        ? `${fallback ? `default ${fallback}; ` : ''}models ${shown.join(', ')}${more > 0 ? ` (+${more} more: ${rest})` : ` (all: ${rest})`}`
-        : adapter.known
-          ? `model ${adapter.known.join(', ')} is the one set in the harness; others: ${rest}`
-          : `models not cached yet (list: ${rest})`,
+        ? `${configured ? `default ${configured}; ` : ''}models ${shown.join(', ')}${more > 0 ? ` (+${more}: ${rest})` : ` (all: ${rest})`}`
+        : configured
+          ? `default ${configured}; others: ${rest}`
+          : adapter.known
+            ? `model ${adapter.known.join(', ')} (set in the harness; more: ${rest})`
+            : `models not cached yet (list: ${rest})`,
     )
   }
-  if (adapter.thinking === 'offered') lines.push('thinking: any the model offers')
+  if (adapter.note) lines.push(adapter.note)
+  if (adapter.thinking === 'offered') lines.push('thinking: any')
   else if (adapter.thinking.length > 0) lines.push(`thinking: ${adapter.thinking.join('|')}`)
   else lines.push('no thinking line')
-  if (adapter.readOnly === 'none') lines.push('no tools line (no read-only)')
+  if (adapter.readOnly === 'none') lines.push('no tools line')
   if (adapter.options) lines.push('takes config:')
   if (!adapter.steer) lines.push('no interrupt:')
   return `- ${name}: ${lines.join('; ')}`
@@ -56,13 +56,14 @@ function harnessLine({ adapter, models, configured, fallback }: GuideHarness): s
 export function guideOf(harnesses: readonly GuideHarness[], personas: readonly GuidePersona[]): string {
   if (harnesses.length === 0) return ''
   const out = [
-    'Crew guide: other coding-agent harnesses run as subagents. Agent tool, subagent_type "crew:<harness>" (generic, follows your prompt) or "crew:<persona>". All you need is here: no shell lookups, README reading or help spawns first.',
-    'Prompt top lines, one per line, kept for follow-ups: `model: <id>`, `thinking: <level>`, `tools: read` (read-only), `config: <option>=<value>`. A line a harness lacks is refused; with no model line it runs its own default.',
-    '`crew-help` is a prompt (not a shell command) sent to an agent type for its full options.',
+    'Crew guide: other harnesses run as subagents: Agent tool, subagent_type "crew:<harness>" or "crew:<persona>". Skip shell lookups, README reads and help spawns.',
+    'Prompt top lines: `model: <id>`, `thinking: <level>` (send it when the user names a level, even if the id ends in one), `tools: read`, `config: <opt>=<value>`. A line a harness lacks is refused; no model line = its default.',
+    '`crew-help`: a prompt (not a shell command) to an agent type, for its full options.',
     ...harnesses.map(harnessLine),
-    'SendMessage follows up; a message starting `interrupt:` stops the current step.',
+    'SendMessage follows up; `interrupt:` first stops the step.',
   ]
-  if (personas.length > 0) out.push('Personas:', ...personas.map((p) => `- crew:${p.name} (${p.harness}): ${clip(p.description, BLURB)}`))
+  // Names and harnesses only: the agent types' own descriptions, in the Agent tool's list, say what each is for.
+  if (personas.length > 0) out.push(`Personas: ${personas.map((p) => `crew:${p.name} (${p.harness})`).join(', ')}`)
   return out.join('\n')
 }
 
@@ -85,14 +86,10 @@ export async function crewGuide(
       const { configured } = adapter
       const text = configured && home ? await $.fs.read(`${home}/${configured.file}`).catch(() => undefined) : undefined
       const model = configured && typeof text === 'string' ? configured.pick(text) : undefined
-      const cached = await cachedModels($, adapter, world.defaultModel).catch(() => [])
-      // pi's list leads with the model its settings choose, so its first is the one a run with no model line uses.
-      const fallback = adapter.name === 'pi' && cached.length > 0 ? cached[0] : undefined
       return {
         adapter,
-        models: cached,
+        models: await cachedModels($, adapter, world.defaultModel).catch(() => []),
         ...(model ? { configured: model } : {}),
-        ...(fallback ? { fallback } : {}),
       }
     }),
   )
@@ -101,6 +98,6 @@ export async function crewGuide(
   const found = await loadPersonas($, cwd, true).catch(() => [])
   for (const persona of found)
     if (!isForeign(persona) && refusal(persona, { adapters: world.adapters, personas: kept }, names) === undefined)
-      kept.set(persona.name, { name: persona.name, harness: persona.harness, description: persona.description })
+      kept.set(persona.name, { name: persona.name, harness: persona.harness })
   return guideOf(harnesses, [...kept.values()])
 }

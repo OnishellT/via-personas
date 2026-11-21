@@ -79,27 +79,31 @@ function outputOf(tool: string, args: Record<string, unknown>, result: unknown, 
   return tool === 'bash' ? tail(output, 2000) : cap(output, 2000)
 }
 
+// What pi runs with no model line: its settings name a provider and a model.
+const settingsDefault = {
+  file: '.pi/agent/settings.json',
+  pick: (text: string) => {
+    try {
+      const s = JSON.parse(text) as { defaultProvider?: unknown; defaultModel?: unknown }
+      return typeof s.defaultProvider === 'string' && typeof s.defaultModel === 'string'
+        ? `${s.defaultProvider}/${s.defaultModel}`
+        : undefined
+    } catch {
+      return undefined
+    }
+  },
+}
+
 export const pi = {
   name: 'pi',
   bin: 'pi',
   about: "pi CLI agent: any provider's model, own tools (edits files).",
   // A table under a header row: provider, model, then its limits, sorted by name; pi's default is in
   // its settings.
+  configured: settingsDefault,
   catalogue: {
     argv: ['pi', '--list-models'],
-    preferred: {
-      file: '.pi/agent/settings.json',
-      pick: (text: string) => {
-        try {
-          const s = JSON.parse(text) as { defaultProvider?: unknown; defaultModel?: unknown }
-          return typeof s.defaultProvider === 'string' && typeof s.defaultModel === 'string'
-            ? `${s.defaultProvider}/${s.defaultModel}`
-            : undefined
-        } catch {
-          return undefined
-        }
-      },
-    },
+    preferred: settingsDefault,
     ids: (stdout: string) =>
       stdout
         .split('\n')
