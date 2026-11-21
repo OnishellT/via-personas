@@ -78,7 +78,7 @@ test('each harness line says what it refuses, from its adapter', () => {
   const guide = full()
   const line = (name: string) => guide.split('\n').find((l) => l.startsWith(`- ${name}: `)) ?? ''
   expect(line('agy')).toContain('thinking: low|medium|high|xhigh|max')
-  expect(line('agy')).toContain('ids end in a level')
+  expect(line('agy')).toContain('ids mostly end in a level')
   expect(line('agy')).toContain('no tools line')
   expect(line('zcode')).toContain('no thinking line')
   expect(line('cursor')).toContain('no thinking line')

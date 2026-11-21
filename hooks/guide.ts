@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Adapter, GuideAdapter } from './adapter'
 import { onPath } from './installed'
 import { cachedModels } from './models'
+import { isModel } from './prompt'
 import { isForeign, loadPersonas, refusal } from './personas'
 
 // The crew guide: what the host needs to use every foreign subagent from its first turn, with no lookup.
@@ -85,7 +86,9 @@ export async function crewGuide(
     installed.map(async (adapter): Promise<GuideHarness> => {
       const { configured } = adapter
       const text = configured && home ? await $.fs.read(`${home}/${configured.file}`).catch(() => undefined) : undefined
-      const model = configured && typeof text === 'string' ? configured.pick(text) : undefined
+      // The plugin's own setting wins for a harness that takes it: a run with no model line uses it.
+      const set = adapter.defaultModel && isModel(world.defaultModel) ? world.defaultModel : undefined
+      const model = set ?? (configured && typeof text === 'string' ? configured.pick(text) : undefined)
       return {
         adapter,
         models: await cachedModels($, adapter, world.defaultModel).catch(() => []),
